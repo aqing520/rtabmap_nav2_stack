@@ -1,0 +1,64 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: {}
+  duration:
+    nanoseconds: 245993887102
+  files:
+  - duration:
+      nanoseconds: 245993887102
+    message_count: 84745
+    path: demo_mapping.db3
+    starting_time:
+      nanoseconds_since_epoch: 1368730003316895004
+  message_count: 84745
+  relative_file_paths:
+  - demo_mapping.db3
+  ros_distro: rosbags
+  starting_time:
+    nanoseconds_since_epoch: 1368730003316895004
+  storage_identifier: sqlite3
+  topics_with_message_count:
+  - message_count: 56909
+    topic_metadata:
+      name: /tf
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: tf2_msgs/msg/TFMessage
+      type_description_hash: RIHS01_e369d0f05a23ae52508854b66f6aa0437f3449d652e8cbf22d5abe85d020f087
+  - message_count: 11936
+    topic_metadata:
+      name: /az3/base_controller/odom
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: nav_msgs/msg/Odometry
+      type_description_hash: RIHS01_3cc97dc7fb7502f8714462c526d369e35b603cfc34d946e3f2eda2766dfec6e0
+  - message_count: 9843
+    topic_metadata:
+      name: /jn0/base_scan
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/LaserScan
+      type_description_hash: RIHS01_64c191398013af96509d518dac71d5164f9382553fce5c1f8cca5be7924bd828
+  - message_count: 2019
+    topic_metadata:
+      name: data_throttled_camera_info
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CameraInfo
+      type_description_hash: RIHS01_b3dfd68ff46c9d56c80fd3bd4ed22c7a4ddce8c8348f2f59c299e73118e7e275
+  - message_count: 2019
+    topic_metadata:
+      name: data_throttled_image/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+      type_description_hash: RIHS01_15640771531571185e2efc8a100baf923961a4d15d5569652e6cb6691e8e371a
+  - message_count: 2019
+    topic_metadata:
+      name: data_throttled_image_depth/compressedDepth
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+      type_description_hash: RIHS01_15640771531571185e2efc8a100baf923961a4d15d5569652e6cb6691e8e371a
+  version: 8

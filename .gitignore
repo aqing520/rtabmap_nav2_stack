@@ -47,5 +47,3 @@ third_party/rtabmap-0.23.4/.settings/
 third_party/rtabmap-0.23.4/.project
 third_party/rtabmap-0.23.4/.cproject
 third_party/rtabmap-0.23.4/.dockerignore
-
-bags/
