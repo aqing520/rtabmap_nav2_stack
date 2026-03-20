@@ -10,35 +10,38 @@
 ## 1. 仓库结构
 
 ```text
-rtabmap_nav2_stack/
-├── src/
-│   ├── robot_bringup/
-│   │   ├── launch/
-│   │   │   ├── bringup.launch.py
-│   │   │   └── rtabmap_bridge.launch.py
-│   │   └── config/
-│   │       ├── ekf_local.yaml
-│   │       └── nav2_common.yaml
-│   └── rtabmap_ros/
-│       ├── rtabmap_launch/
-│       ├── rtabmap_slam/
-│       ├── rtabmap_odom/
-│       ├── rtabmap_sync/
-│       ├── rtabmap_util/
-│       ├── rtabmap_msgs/
-│       ├── rtabmap_rviz_plugins/
-│       ├── rtabmap_examples/
-│       └── rtabmap_demos/
-├── third_party/
-│   └── rtabmap-0.23.4/
-├── scripts/
-│   ├── build_rtabmap_0234.sh
-│   └── use_rtabmap_0234_env.sh
-└── rtabmap_solution_package.pdf
+rtabmap_nav2_stack/                 # 项目根目录
+├── src/                            # ROS 2 工作空间源码目录
+│   ├── robot_bringup/              # (未启用) 高级导航启动包组，包含 EKF 和 Nav2 的精细配置
+│   │   ├── launch/                 # 启动脚本存放目录
+│   │   │   ├── bringup.launch.py   # 总启动入口，控制全自动导航的各个模块
+│   │   │   └── rtabmap_bridge.launch.py # 负责将 RTAB-Map 的输出桥接到 Nav2 栈
+│   │   └── config/                 # 核心参数配置目录
+│   │       ├── ekf_local.yaml      # 扩展卡尔曼滤波(EKF)配置，用于融合 Lidar, IMU, 轮速里程计
+│   │       └── nav2_common.yaml    # Navigation 2 配置，包含 MPPI 局部规划器与成本地图参数
+│   └── rtabmap_ros/                # 官方 RTAB-Map ROS 2 包装层代码副本
+│       ├── rtabmap_launch/         # RTAB-Map 核心 Launch 文件
+│       ├── rtabmap_slam/           # SLAM 核心节点，负责构图与回环检测
+│       ├── rtabmap_odom/           # 视觉/激光里程计计算节点
+│       ├── rtabmap_sync/           # 多传感器数据（雷达、RGBD、IMU）时间同步节点
+│       ├── rtabmap_util/           # 点云和图像处理工具集节点
+│       ├── rtabmap_msgs/           # RTAB-Map 自定义 ROS 2 消息类型定义
+│       ├── rtabmap_rviz_plugins/   # RViz 界面中用于显示 RTAB-Map 数据的图形插件
+│       ├── rtabmap_examples/       # 单体传感器（如 Realsense, ZXing）的使用演示
+│       └── rtabmap_demos/          # 完整机器人的离线建图仿真与演示程序
+├── third_party/                    # 第三方依赖库目录
+│   └── rtabmap-0.23.4/             # RTAB-Map C++ 核心算法源码，保证版本一致性
+├── scripts/                        # 工业级自动化运维与建图脚本集合（目前主用的建图入口）
+│   ├── build_rtabmap_0234.sh       # 隔离编译 RTAB-Map 核心层脚本
+│   └── use_rtabmap_0234_env.sh     # 供 colcon 编译时挂载核心库路径的环境脚本
+└── rtabmap_solution_package.pdf    # 项目方案说明文档
 ```
 
 ## 2. 编译顺序（推荐）
 
+'''
+do_build_all.sh  直接一键编译环境
+'''
 ### 2.1 先编译本地 RTABMap 0.23.4
 
 > 你的 `rtabmap_ros` 已要求 `find_package(RTABMap 0.23.4 REQUIRED)`，
