@@ -1,6 +1,6 @@
 # 协作开发指南
 
-> 本文档适用于 [rtab-ros2](https://github.com/aqing520/rtab-ros2.git) 项目的所有协作者。
+> 本文档适用于 [rtabmap_nav2_stack](https://github.com/aqing520/rtabmap_nav2_stack.git) 项目的所有协作者。
 >
 > **分支规则：**
 > - `master`：备份分支，**请勿直接修改**
@@ -39,8 +39,8 @@
 > 每人只需做一次。
 
 ```bash
-git clone -b dev https://github.com/aqing520/rtab-ros2.git
-cd rtab-ros2
+git clone -b dev https://github.com/aqing520/rtabmap_nav2_stack.git
+cd rtabmap_nav2_stack
 ```
 
 克隆后会自动处于 `dev` 分支，可用以下命令确认：
@@ -116,7 +116,7 @@ git push
 
 ## 第五步：发起 Pull Request
 
-1. 打开仓库页面：[https://github.com/aqing520/rtab-ros2](https://github.com/aqing520/rtab-ros2)
+1. 打开仓库页面：[https://github.com/aqing520/rtabmap_nav2_stack](https://github.com/aqing520/rtabmap_nav2_stack)
 2. GitHub 会自动提示你刚推送的分支，点击 **"Compare & pull request"**
 3. 确认目标分支为 **`dev`**（不要选 `master`）
 4. 填写标题和描述，说明改了什么
@@ -157,7 +157,7 @@ git merge origin/dev
 
 | 操作 | 命令 |
 |------|------|
-| 克隆 dev 分支 | `git clone -b dev https://github.com/aqing520/rtab-ros2.git` |
+| 克隆 dev 分支 | `git clone -b dev https://github.com/aqing520/rtabmap_nav2_stack.git` |
 | 拉取最新 dev | `git pull origin dev` |
 | 创建 fix 分支 | `git checkout -b fix/你的名字-描述` |
 | 查看当前状态 | `git status` |
