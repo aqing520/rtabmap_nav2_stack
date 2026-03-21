@@ -1,0 +1,22 @@
+[INFO] [launch]: All log files can be found below /home/wheeltec/.ros/log/2026-03-21-20-08-30-503694-wheeltec-397166
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [livox_ros_driver2_node-1]: process started with pid [397282]
+[livox_ros_driver2_node-1] [INFO] [1774094910.707143354] [livox_lidar_publisher]: Livox Ros Driver2 Version: 1.2.4
+[livox_ros_driver2_node-1] [INFO] [1774094910.708005866] [livox_lidar_publisher]: Data Source is raw lidar.
+[livox_ros_driver2_node-1] [INFO] [1774094910.708048172] [livox_lidar_publisher]: Config file : /home/wheeltec/wzy/src/livox_ros_driver2/launch/../config/MID360_config.json
+[livox_ros_driver2_node-1] LdsLidar *GetInstance
+[livox_ros_driver2_node-1] config lidar type: 8
+[livox_ros_driver2_node-1] successfully parse base config, counts: 1
+[livox_ros_driver2_node-1] [INFO] [1774094910.713857450] [livox_lidar_publisher]: Init lds lidar success!
+[livox_ros_driver2_node-1] GetFreeIndex key:livox_lidar_346597568.
+[livox_ros_driver2_node-1] Lidar[0] storage queue size: 16
+[livox_ros_driver2_node-1] set pcl data type, handle: 346597568, data type: 1
+[livox_ros_driver2_node-1] set scan pattern, handle: 346597568, scan pattern: 0
+[livox_ros_driver2_node-1] begin to change work mode to 'Normal', handle: 346597568
+[livox_ros_driver2_node-1] successfully set data type, handle: 346597568, set_bit: 2
+[livox_ros_driver2_node-1] successfully set pattern mode, handle: 346597568, set_bit: 0
+[livox_ros_driver2_node-1] successfully set lidar attitude, ip: 192.168.168.20
+[livox_ros_driver2_node-1] successfully change work mode, handle: 346597568
+[livox_ros_driver2_node-1] successfully enable Livox Lidar imu, ip: 192.168.168.20
+[livox_ros_driver2_node-1] [INFO] [1774094913.714496431] [livox_lidar_publisher]: livox/imu publish use imu format
+[livox_ros_driver2_node-1] [INFO] [1774094913.717869223] [livox_lidar_publisher]: livox/lidar publish use PointCloud2 format
