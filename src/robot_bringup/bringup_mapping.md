@@ -32,9 +32,9 @@ rtabmap (SLAM 建图)
 ### TF 树
 
 ```
-map → odom → base_footprint → base_link
- ↑      ↑            ↓
-rtabmap  EKF     livox_frame
+map ──→ odom ──→ base_footprint ──→ base_link ──→ livox_frame
+ ↑(20Hz) ↑(50Hz)     (static)         (static)
+rtabmap   EKF
 ```
 
 ### 常用参数
@@ -47,6 +47,7 @@ rtabmap  EKF     livox_frame
 | `scan_cloud_topic` | `/livox/lidar` | 点云输入话题 |
 | `imu_topic` | `/livox/imu` | IMU 话题 |
 | `frame_id` | `base_footprint` | 机器人基坐标系 |
+| `delete_db_on_start` | `true` | 启动时删除旧 RTAB-Map 数据库（全新建图） |
 
 ### 示例
 
@@ -72,15 +73,16 @@ ros2 node list
 ros2 lifecycle get /ekf_local_filter
 # 应输出: active [3]
 
-# 检查关键话题有数据
-ros2 topic hz /odometry/lio        # ICP 输出
-ros2 topic hz /odometry/local      # EKF 融合输出
+# 检查关键话题频率
+ros2 topic hz /odometry/lio        # ICP 输出，预期 ~8-15 Hz
+ros2 topic hz /odometry/local      # EKF 融合输出，预期 ~50 Hz
 
 # 查看当前位姿
 ros2 topic echo /odometry/local --once
 
-# 查看 TF 树
+# 查看 TF 树（生成 frames.pdf）
 ros2 run tf2_tools view_frames
+# 预期链路: map → odom → base_footprint → base_link → livox_frame
 ```
 
 ## 停止

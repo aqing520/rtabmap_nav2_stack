@@ -97,7 +97,7 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[{
             'use_sim_time': use_sim_time,
             'frame_id': LaunchConfiguration('frame_id'),
-            'odom_frame_id': 'icp_odom',
+            'odom_frame_id': 'odom',
             'publish_tf': False,
             'wait_for_transform': 0.2,
             'Icp/VoxelSize': '0.15',
