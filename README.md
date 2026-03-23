@@ -109,19 +109,7 @@ flowchart LR
         SLAM --> DB1["rtabmap.db"]
     end
 
-    subgraph B["当前未启用的 rtabmap_launch 内部 odom 支路"]
-        SENSOR["图像 / 点云 / 激光"] --> ODOM_NODE["rtabmap_odom"]
-        IMU4["IMU"] --> ODOM_NODE
-        ODOM_NODE --> ODOM_TOPIC["odom / odom_info"]
-        ODOM_TOPIC --> SLAM2["rtabmap_slam"]
-    end
 ```
-
-- 当前实际使用：`rtabmap_odom::icp_odometry` 先把 `/livox/lidar + /livox/imu` 处理成 `/odometry/lio`
-- 然后 `robot_localization` 把 `/odometry/lio + /livox/imu` 融合成 `/odometry/local`，再喂给 `rtabmap_slam`
-- 同时 `rtabmap_slam` 直接订阅 `/livox/lidar` 和 `/livox/imu` 作为建图输入
-- README 这里不再写 `/sensors/wheel/odom`、`/sensors/imu/data`、`/sensors/lidar/points_deskewed`，因为这不是当前 `mapping.launch.py` 的默认路径
-- 可选支路：只有在另一个启动配置里打开 `rtabmap_launch` 内部的 `visual_odometry` 或 `icp_odometry` 时，才会走它自己的 `odom / odom_info -> rtabmap_slam` 路线
 
 最终 TF 主链：
 
