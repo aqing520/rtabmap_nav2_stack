@@ -61,14 +61,16 @@ flowchart LR
     LIVOX --> EKF
     EKF --> ODOM_LOCAL["/odometry/local"]
 
-    RTAB_LAUNCH["rtabmap_launch"] --> SL["rtabmap_slam"]
     ODOM_LOCAL --> SL
     LIVOX --> SL
 
     subgraph R1["mapping.launch.py 当前实际主链"]
         ICP
         EKF
-        SL
+        subgraph RTAB_LAUNCH["IncludeLaunchDescription: rtabmap_launch/rtabmap.launch.py"]
+            SL["rtabmap_slam"]
+            VIZ["rtabmap_viz"]
+        end
     end
 
     subgraph R2["RTAB-Map 代码级依赖"]
@@ -77,8 +79,6 @@ flowchart LR
         SL -.数据转换.-> CONV["rtabmap_conversions"]
         SL -.地图/工具.-> UTIL["rtabmap_util"]
     end
-
-    RTAB_LAUNCH -.可选可视化.-> VIZ["rtabmap_viz / RViz"]
 ```
 
 - 当前 `mapping.launch.py` 主链不是单纯 `robot_localization -> /odometry/local -> rtabmap_slam`，前面还有 `rtabmap_odom::icp_odometry -> /odometry/lio` 这一段
