@@ -77,6 +77,16 @@ set -u
 
 has_topic_data() {
   local topic="$1"
+  # If topic has multiple types (e.g. livox publishes both CustomMsg and PointCloud2),
+  # ros2 topic echo fails. Fall back to publisher count check.
+  local type_count
+  type_count="$(ros2 topic type "$topic" 2>/dev/null | wc -l)"
+  if [[ "$type_count" -gt 1 ]]; then
+    local pub_count
+    pub_count="$(ros2 topic info "$topic" 2>/dev/null | grep 'Publisher count' | awk '{print $NF}')"
+    [[ "${pub_count:-0}" -gt 0 ]]
+    return $?
+  fi
   timeout "${WAIT_TIMEOUT_SEC}s" ros2 topic echo --once "$topic" >/dev/null 2>&1
 }
 

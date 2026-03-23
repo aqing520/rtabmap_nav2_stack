@@ -17,6 +17,7 @@ __pycache__/
 build/
 install/
 log/
+logs/
 .colcon/
 # CMake / Make artifacts
 CMakeCache.txt

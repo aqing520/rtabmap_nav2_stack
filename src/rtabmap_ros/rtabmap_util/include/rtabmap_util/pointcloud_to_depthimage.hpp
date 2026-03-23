@@ -27,6 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <rtabmap_util/visibility.h>
 #include "rclcpp/rclcpp.hpp"
+#include <rtabmap_conversions/MsgConversion.h>
 
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -37,9 +38,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include <message_filters/sync_policies/approximate_time.hpp>
-#include <message_filters/sync_policies/exact_time.hpp>
-#include <message_filters/subscriber.hpp>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/sync_policies/exact_time.h>
+#include <message_filters/subscriber.h>
 
 namespace rtabmap_util
 {

@@ -449,7 +449,7 @@ livox_launch_exists() {
   local prefix
   prefix="$(get_livox_pkg_prefix)"
   [[ -n "$prefix" ]] || return 1
-  find "$prefix/share/livox_ros_driver2" -maxdepth 4 -type f -name "$launch_file" 2>/dev/null | head -n1 | grep -q .
+  find "$prefix/share/livox_ros_driver2" -maxdepth 4 \( -type f -o -type l \) -name "$launch_file" 2>/dev/null | head -n1 | grep -q .
 }
 
 lidar_cmd_is_custom_launch() {

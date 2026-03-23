@@ -1,11 +1,9 @@
-# Suggested location:
-#   robot_bringup/config/ekf_local.yaml
+# robot_bringup/config/ekf_local.yaml
 #
 # Design intent:
 # - ekf_node publishes odom -> base_footprint.
-# - wheel odom contributes smooth twist.
-# - LiDAR odom contributes local pose + twist.
-# - IMU contributes yaw / yaw-rate stabilization.
+# - ICP odom (from rtabmap icp_odometry) contributes local pose + twist.
+# - Livox IMU contributes yaw / yaw-rate stabilization.
 # - RTAB-Map remains the only global map -> odom source.
 
 ekf_local_filter:
@@ -27,9 +25,10 @@ ekf_local_filter:
     base_link_frame: base_footprint
     world_frame: odom
 
-    odom0: /sensors/wheel/odom
-    odom0_config: [false, false, false,
-                   false, false, false,
+    # --- ICP 里程计 (rtabmap icp_odometry 输出) ---
+    odom0: /odometry/lio
+    odom0_config: [true,  true,  false,
+                   false, false, true,
                    true,  false, false,
                    false, false, true,
                    false, false, false]
@@ -38,18 +37,8 @@ ekf_local_filter:
     odom0_differential: false
     odom0_relative: false
 
-    odom1: /odometry/lio
-    odom1_config: [true,  true,  false,
-                   false, false, true,
-                   true,  false, false,
-                   false, false, true,
-                   false, false, false]
-    odom1_queue_size: 20
-    odom1_nodelay: false
-    odom1_differential: false
-    odom1_relative: false
-
-    imu0: /sensors/imu/data
+    # --- Livox MID360 板载 IMU ---
+    imu0: /livox/imu
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
@@ -61,9 +50,7 @@ ekf_local_filter:
     imu0_relative: true
     imu0_remove_gravitational_acceleration: true
 
-    odom0_pose_rejection_threshold: 5.0
+    odom0_pose_rejection_threshold: 3.0
     odom0_twist_rejection_threshold: 2.0
-    odom1_pose_rejection_threshold: 3.0
-    odom1_twist_rejection_threshold: 2.0
     imu0_pose_rejection_threshold: 0.8
     imu0_twist_rejection_threshold: 0.8
