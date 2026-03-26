@@ -50,3 +50,5 @@ third_party/rtabmap-0.23.4/.cproject
 third_party/rtabmap-0.23.4/.dockerignore
 
 frames.*
+cloud_map/*.pcd
+cloud_map/*.ply 
