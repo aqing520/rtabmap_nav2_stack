@@ -5,7 +5,7 @@ Suggested location:
   robot_bringup/launch/rtabmap_bridge.launch.py
 
 This wrapper keeps RTAB-Map focused on global SLAM, loop closure, mapping, and
-localization, while local continuous odometry comes from robot_localization.
+localization, while local continuous odometry comes from FAST-LIO.
 """
 
 from launch import LaunchDescription
@@ -27,10 +27,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument('frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('map_frame_id', default_value='map'),
-        DeclareLaunchArgument('odom_topic', default_value='/odometry/local'),
-        DeclareLaunchArgument('imu_topic', default_value='/sensors/imu/data'),
+        DeclareLaunchArgument('odom_topic', default_value='/Odometry'),
+        DeclareLaunchArgument('imu_topic', default_value='/livox/imu'),
         DeclareLaunchArgument('gps_topic', default_value='/sensors/gps/fix'),
-        DeclareLaunchArgument('scan_cloud_topic', default_value='/sensors/lidar/points_deskewed'),
+        DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
         DeclareLaunchArgument('rgb_topic', default_value='/sensors/camera/rgb/image_rect'),
         DeclareLaunchArgument('depth_topic', default_value='/sensors/camera/depth/image_rect'),
         DeclareLaunchArgument('camera_info_topic', default_value='/sensors/camera/rgb/camera_info'),

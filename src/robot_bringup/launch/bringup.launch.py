@@ -6,10 +6,12 @@ Suggested location:
 
 Assumptions:
 - RTAB-Map is the only publisher of map -> odom.
-- robot_localization ekf_node publishes odom -> base_footprint and /odometry/local.
-- Nav2 consumes /map and /odometry/local.
+- FAST-LIO publishes odom -> base_footprint and /Odometry.
+- Nav2 consumes /map and /Odometry.
 - The base controller should subscribe to /cmd_vel_safe.
 """
+
+import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
@@ -31,12 +33,12 @@ def generate_launch_description() -> LaunchDescription:
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     database_path = LaunchConfiguration('database_path')
-    ekf_params_file = LaunchConfiguration('ekf_params_file')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
     nav2_bringup_share = FindPackageShare('nav2_bringup')
     livox_share = FindPackageShare('livox_ros_driver2')
+    fast_lio_share = FindPackageShare('fast_lio')
 
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
@@ -49,22 +51,22 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz through the RTAB-Map bridge'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
-        DeclareLaunchArgument('ekf_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'ekf_local.yaml'])),
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
-        DeclareLaunchArgument('rtabmap_odom_topic', default_value='/odometry/local'),
-        DeclareLaunchArgument('imu_topic', default_value='/sensors/imu/data'),
+        DeclareLaunchArgument('rtabmap_odom_topic', default_value='/Odometry'),
+        DeclareLaunchArgument('imu_topic', default_value='/livox/imu'),
         DeclareLaunchArgument('gps_fix_topic', default_value='/sensors/gps/fix'),
-        DeclareLaunchArgument('wheel_odom_topic', default_value='/sensors/wheel/odom'),
-        DeclareLaunchArgument('lio_odom_topic', default_value='/odometry/lio'),
+        DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
     ]
 
+    # ── 1. Livox MID360 driver ──
     livox_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([livox_share, 'launch', 'msg_MID360_launch.py'])),
         condition=IfCondition(start_livox),
     )
 
+    # ── 2. Static TFs ──
     base_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -73,15 +75,25 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(publish_base_link_tf),
     )
 
-    ekf_local = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_local_filter',
-        output='screen',
-        parameters=[ekf_params_file, {'use_sim_time': use_sim_time}],
-        remappings=[('odometry/filtered', '/odometry/local'), ('/odometry/filtered', '/odometry/local')],
+    livox_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_link_to_livox_frame',
+        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'livox_frame'],
     )
 
+    # ── 3. FAST-LIO (replaces icp_odometry + EKF) ──
+    fast_lio_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([fast_lio_share, 'launch', 'mapping.launch.py'])),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'config_file': 'mid360.yaml',
+            'rviz': 'false',
+        }.items(),
+    )
+
+    # ── 4. GPS (optional, requires robot_localization installed separately) ──
     navsat_transform = Node(
         package='robot_localization',
         executable='navsat_transform_node',
@@ -103,11 +115,12 @@ def generate_launch_description() -> LaunchDescription:
         remappings=[
             ('imu/data', LaunchConfiguration('imu_topic')),
             ('gps/fix', LaunchConfiguration('gps_fix_topic')),
-            ('odometry/filtered', '/odometry/local'),
+            ('odometry/filtered', '/Odometry'),
             ('odometry/gps', '/odometry/gps'),
         ],
     )
 
+    # ── 5. RTAB-Map (SLAM / Localization) ──
     rtabmap_bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([robot_bringup_share, 'launch', 'rtabmap_bridge.launch.py'])),
         launch_arguments={
@@ -122,10 +135,12 @@ def generate_launch_description() -> LaunchDescription:
             'odom_topic': LaunchConfiguration('rtabmap_odom_topic'),
             'imu_topic': LaunchConfiguration('imu_topic'),
             'gps_topic': LaunchConfiguration('gps_fix_topic'),
+            'scan_cloud_topic': LaunchConfiguration('scan_cloud_topic'),
             'rviz': enable_rviz,
         }.items(),
     )
 
+    # ── 6. Nav2 ──
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([nav2_bringup_share, 'launch', 'navigation_launch.py'])),
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
@@ -140,6 +155,7 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
+    # ── 7. Collision Monitor ──
     collision_monitor = Node(
         package='nav2_collision_monitor',
         executable='collision_monitor',
@@ -174,20 +190,33 @@ def generate_launch_description() -> LaunchDescription:
             'SlowZone.polygon_pub_topic': 'collision_monitor/slow_zone',
             'SlowZone.enabled': True,
             'pointcloud.type': 'pointcloud',
-            'pointcloud.topic': '/sensors/lidar/points_deskewed',
+            'pointcloud.topic': '/cloud_registered_body',
             'pointcloud.min_height': 0.05,
             'pointcloud.max_height': 1.80,
             'pointcloud.enabled': True,
         }],
     )
 
+    # ── Assemble ──
     ld = LaunchDescription()
     ld.add_action(SetEnvironmentVariable('RCUTILS_LOGGING_BUFFERED_STREAM', '1'))
+
+    # RTAB-Map library workaround: dynamically locate from workspace root
+    _colcon_prefix = os.environ.get('COLCON_PREFIX_PATH', '')
+    if _colcon_prefix:
+        _ws_root = os.path.dirname(_colcon_prefix.split(':')[0])
+        _rtabmap_lib = os.path.join(_ws_root, 'third_party', 'rtabmap-0.23.4', 'install', 'lib')
+        _existing_ldpath = os.environ.get('LD_LIBRARY_PATH', '')
+        ld.add_action(SetEnvironmentVariable('LD_LIBRARY_PATH',
+            _rtabmap_lib + ':' + _existing_ldpath if _existing_ldpath else _rtabmap_lib
+        ))
+
     for action in declare_args:
         ld.add_action(action)
     ld.add_action(base_tf)
+    ld.add_action(livox_tf)
     ld.add_action(livox_launch)
-    ld.add_action(ekf_local)
+    ld.add_action(fast_lio_launch)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
     ld.add_action(nav2_launch)

@@ -3,7 +3,7 @@
 #
 # Design intent:
 # - RTAB-Map publishes /map and map -> odom.
-# - ekf_local publishes odom -> base_footprint and /odometry/local.
+# - FAST-LIO publishes odom -> base_footprint and /Odometry.
 # - navigation_launch.py from nav2_bringup is used (NOT amcl/localization_launch.py).
 # - global_costmap works in map frame; local_costmap works in odom frame.
 
@@ -12,7 +12,7 @@ bt_navigator:
     use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
-    odom_topic: /odometry/local
+    odom_topic: /Odometry
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -131,7 +131,7 @@ local_costmap:
         mark_threshold: 0
         observation_sources: lidar_cloud
         lidar_cloud:
-          topic: /sensors/lidar/points_deskewed
+          topic: /cloud_registered_body
           data_type: PointCloud2
           clearing: true
           marking: true
@@ -169,7 +169,7 @@ global_costmap:
         enabled: true
         observation_sources: lidar_cloud
         lidar_cloud:
-          topic: /sensors/lidar/points_deskewed
+          topic: /cloud_registered_body
           data_type: PointCloud2
           clearing: true
           marking: true
@@ -252,7 +252,7 @@ velocity_smoother:
     min_velocity: [-0.20, 0.0, -1.50]
     max_accel: [1.50, 0.0, 2.50]
     max_decel: [-1.50, 0.0, -2.50]
-    odom_topic: /odometry/local
+    odom_topic: /Odometry
     odom_duration: 0.10
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0

@@ -3,8 +3,8 @@
 
 本仓库用于落地一套分层清晰的 ROS2 导航方案：
 
+- `FAST-LIO` 负责雷达惯性里程计（发布 `odom -> base_footprint`）
 - `RTAB-Map` 负责全局建图/回环/重定位（发布 `map -> odom`）
-- `robot_localization (EKF)` 负责本地连续里程计（发布 `odom -> base_footprint`）
 - `Nav2` 负责规划、控制与避障执行
 ## 0.编译
 ```bash
@@ -16,13 +16,15 @@ do_build_all.sh  #直接编译就行
 ```text
 rtabmap_nav2_stack/                 # 工作空间
 ├── src/                            # ROS 2 工作空间源码目录
-│   ├── robot_bringup/              # (未启用) 高级导航启动包组，包含 EKF 和 Nav2 的精细配置
+│   ├── robot_bringup/              # 高级导航启动包组，包含 Nav2 的精细配置
 │   │   ├── launch/                 # 启动脚本存放目录
+│   │   │   ├── fastlio_mapping.launch.py # 当前建图主入口（FAST-LIO + RTAB-Map）
 │   │   │   ├── bringup.launch.py   # 总启动入口，控制全自动导航的各个模块
 │   │   │   └── rtabmap_bridge.launch.py # 负责将 RTAB-Map 的输出桥接到 Nav2 栈
 │   │   └── config/                 # 核心参数配置目录
-│   │       ├── ekf_local.yaml      # 扩展卡尔曼滤波(EKF)配置，用于融合 Lidar, IMU, 轮速里程计
 │   │       └── nav2_common.yaml    # Navigation 2 配置
+│   ├── FAST_LIO_ROS2/              # FAST-LIO 激光惯性紧耦合里程计（提供 odom 和去畸变点云）
+│   ├── livox_ros_driver2/          # Livox MID360 雷达驱动
 │   └── rtabmap_ros/                # 官方 RTAB-Map ROS 2 包装层
 │       ├── rtabmap_launch/         # （done）通用 Launch 入口，  目前的脚本走的就是这个
 │       ├── rtabmap_slam/           # （done）SLAM 核心节点，负责建图、回环检测、图优化与重定位
@@ -48,25 +50,21 @@ rtabmap_nav2_stack/                 # 工作空间
 
 ## 2.建图过程  
 
-`src/robot_bringup/` 目前是本地 `launch/config` 目录，不是独立 ROS 包。
-下面只画本项目里实际参与建图的 ROS 包，以及它们和外部雷达驱动输入的关系。
+当前建图主入口为 `fastlio_mapping.launch.py`，使用 FAST-LIO 取代了之前的 icp_odometry + EKF 方案。
 
 ### 2.1  包协作过程
 
 ```mermaid
 flowchart LR
-    LIVOX["livox_ros_driver2\n/livox/lidar + /livox/imu"] --> ICP["rtabmap_odom\nicp_odometry"]
-    ICP --> LIO["/odometry/lio"]
-    LIO --> EKF["robot_localization\nekf_node"]
-    LIVOX --> EKF
-    EKF --> ODOM_LOCAL["/odometry/local"]
+    LIVOX["livox_ros_driver2\n/livox/lidar + /livox/imu"] --> FASTLIO["FAST-LIO\nfast_lio"]
+    FASTLIO --> ODOM["/Odometry\n+ TF: odom → base_footprint"]
+    FASTLIO --> CLOUD_REG["/cloud_registered_body\n(去畸变点云)"]
 
-    ODOM_LOCAL --> SL
-    LIVOX --> SL
+    ODOM --> SL
+    CLOUD_REG --> SL
 
-    subgraph R1["mapping.launch.py 当前实际主链"]
-        ICP
-        EKF
+    subgraph R1["fastlio_mapping.launch.py 当前实际主链"]
+        FASTLIO
         subgraph RTAB_LAUNCH["IncludeLaunchDescription: rtabmap_launch/rtabmap.launch.py"]
             SL["rtabmap_slam"]
             VIZ["rtabmap_viz"]
@@ -81,31 +79,25 @@ flowchart LR
     end
 ```
 
-- 当前 `mapping.launch.py` 主链不是单纯 `robot_localization -> /odometry/local -> rtabmap_slam`，前面还有 `rtabmap_odom::icp_odometry -> /odometry/lio` 这一段
-- `mapping.launch.py` 里显式启动了 `rtabmap_odom/icp_odometry`，它是 `/odometry/lio` 的实际发布者
-- `robot_localization` 把 `/odometry/lio` 和 `/livox/imu` 融合成 `/odometry/local`
-- `rtabmap_slam` 消费 `/odometry/local`、`/livox/lidar` 和 `/livox/imu`，并发布 `map -> odom`
-- 当前配置下，`rtabmap_launch` 内部自带的 odometry 支路被关闭：`visual_odometry = false`、`icp_odometry = false`
-- 这里要区分两件事：当前工程使用了 `rtabmap_odom` 包，但不是通过 `rtabmap_launch` 内部再起一套 odom，而是由 `mapping.launch.py` 单独起 `icp_odometry` 节点
+- FAST-LIO 直接消费 `/livox/lidar` 和 `/livox/imu`，输出激光惯性紧耦合里程计 `/Odometry`，同时发布 `odom -> base_footprint` TF
+- FAST-LIO 还输出去运动畸变后的点云 `/cloud_registered_body`，供 RTAB-Map 做回环检测和建图
+- `rtabmap_slam` 消费 `/Odometry` 和 `/cloud_registered_body`，执行图优化并发布 `map -> odom` TF
+- 不再使用 `icp_odometry`、`robot_localization (EKF)` 等中间环节，链路更短更简洁
 
 ### 2.2  关键数据流向
 
 ```mermaid
 flowchart LR
-    subgraph A["mapping.launch.py 当前实际数据流"]
-        CLOUD["/livox/lidar"] --> ICP_NODE["rtabmap_odom\nicp_odometry"]
-        IMU1["/livox/imu"] --> ICP_NODE
-        ICP_NODE --> LIO["/odometry/lio"]
+    subgraph A["fastlio_mapping.launch.py 当前实际数据流"]
+        CLOUD["/livox/lidar"] --> FASTLIO["FAST-LIO"]
+        IMU1["/livox/imu"] --> FASTLIO
+        FASTLIO --> ODOM["/Odometry"]
+        FASTLIO --> CLOUD_REG["/cloud_registered_body"]
 
-        LIO --> EKF["robot_localization\nekf_node"]
-        IMU2["/livox/imu"] --> EKF
-        EKF --> ODOM_LOCAL["/odometry/local"]
-
-        CLOUD --> SLAM["rtabmap_slam"]
-        IMU3["/livox/imu"] --> SLAM
-        ODOM_LOCAL --> SLAM
+        ODOM --> SLAM["rtabmap_slam"]
+        CLOUD_REG --> SLAM
         SLAM --> MAP["/map"]
-        SLAM --> TF1["TF: map -> odom"]
+        SLAM --> TF1["TF: map → odom"]
         SLAM --> DB1["rtabmap.db"]
     end
 
@@ -114,5 +106,7 @@ flowchart LR
 最终 TF 主链：
 
 ```text
-map -> odom -> base_footprint -> base_link -> lidar/imu
+map → odom → base_footprint → base_link → livox_frame
+ ↑      ↑        (static)       (static)
+rtabmap FAST-LIO
 ```
