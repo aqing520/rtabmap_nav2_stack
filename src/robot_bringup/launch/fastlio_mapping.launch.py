@@ -128,7 +128,7 @@ def generate_launch_description() -> LaunchDescription:
             'namespace': 'rtabmap',
             'args': PythonExpression([
                 "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
-                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.12 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.8 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04'"
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04'"
             ]),
         }.items(),
     )
