@@ -43,9 +43,10 @@ rtabmap_nav2_stack/                 # 工作空间
 │       └── rtabmap_demos/          # （done）完整机器人的离线建图仿真与演示程序
 ├── third_party/                    #
 │   └── rtabmap-0.23.4/             # RTAB-Map C++ 核心算法源码，保证版本一致性
-├── scripts/                        # 编译和配置脚本
-│   ├── build_rtabmap_0234.sh       # （done）隔离编译 RTAB-Map 核心层脚本
-│   └── use_rtabmap_0234_env.sh     # （done）供 colcon 编译时挂载核心库路径的环境脚本
+├── scripts/                        # 工具和环境脚本
+│   ├── extract_pcd_from_db.py      # 从 rtabmap 数据库中导出点云（PCD）
+│   ├── export_cloud_map.sh         # 一键导出当前云图/地图数据
+│   └── use_rtabmap_0234_env.sh     # 供 colcon 编译时挂载 RTAB-Map 0.23.4 核心库路径的环境脚本
 ```
 
 ## 2.建图过程  
