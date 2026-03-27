@@ -3,7 +3,7 @@
 > 本文档适用于 [rtabmap_nav2_stack](https://github.com/aqing520/rtabmap_nav2_stack.git) 项目的所有协作者。
 >
 > **分支规则：**
-> - `master`：备份分支，**请勿直接修改**
+> - `main`：备份分支，**请勿直接修改**
 > - `dev`：主开发分支，所有协作基于此分支进行
 
 ---
