@@ -100,7 +100,7 @@ def generate_launch_description() -> LaunchDescription:
     # ── 1. Livox MID360 driver ──
     livox_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([livox_share, 'launch', 'msg_MID360_launch.py'])),
+            PathJoinSubstitution([livox_share, 'launch', 'rviz_MID360_launch.py'])),
         condition=IfCondition(start_livox),
     )
 
