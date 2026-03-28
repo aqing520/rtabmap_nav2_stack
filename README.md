@@ -18,11 +18,11 @@ rtabmap_nav2_stack/                 # 工作空间
 ├── src/                            # ROS 2 工作空间源码目录
 │   ├── robot_bringup/              # 高级导航启动包组，包含 Nav2 的精细配置
 │   │   ├── launch/                 # 启动脚本存放目录
-│   │   │   ├── fastlio_mapping.launch.py # 当前建图主入口（FAST-LIO + RTAB-Map）
-│   │   │   ├── bringup.launch.py   # 总启动入口，控制全自动导航的各个模块
-│   │   │   └── rtabmap_bridge.launch.py # 负责将 RTAB-Map 的输出桥接到 Nav2 栈
+│   │   │   ├── fastlio_mapping.launch.py  # 建图入口（FAST-LIO + RTAB-Map，可选 RTK）
+│   │   │   └── nav2.launch.py             # 导航入口（定位 + Nav2，可选 RTK）
 │   │   └── config/                 # 核心参数配置目录
 │   │       └── nav2_common.yaml    # Navigation 2 配置
+│   ├── rtk-driver/                 # BT-468 RTK GNSS 驱动（串口读取 NMEA，发布 /fix）
 │   ├── FAST_LIO_ROS2/              # FAST-LIO 激光惯性紧耦合里程计（提供 odom 和去畸变点云）
 │   ├── livox_ros_driver2/          # Livox MID360 雷达驱动
 │   └── rtabmap_ros/                # 官方 RTAB-Map ROS 2 包装层
@@ -50,63 +50,106 @@ rtabmap_nav2_stack/                 # 工作空间
 
 ## 2.建图过程  
 
-当前建图主入口为 `fastlio_mapping.launch.py`，使用 FAST-LIO 取代了之前的 icp_odometry + EKF 方案。
+建图统一入口为 `fastlio_mapping.launch.py`，RTK GPS 通过 `enable_gps` 参数可选开启（默认关闭）。
 
-### 2.1  包协作过程
+```bash
+# 纯 LiDAR 建图（默认）
+ros2 launch robot_bringup fastlio_mapping.launch.py
+
+# 开启 RTK GPS 建图
+ros2 launch robot_bringup fastlio_mapping.launch.py enable_gps:=true
+```
+
+### 2.1  关键数据流向
 
 ```mermaid
 flowchart LR
-    LIVOX["livox_ros_driver2\n/livox/lidar + /livox/imu"] --> FASTLIO["FAST-LIO\nfast_lio"]
-    FASTLIO --> ODOM["/Odometry\n+ TF: odom → base_footprint"]
-    FASTLIO --> CLOUD_REG["/cloud_registered_body\n(去畸变点云)"]
+    CLOUD["/livox/lidar"] --> FASTLIO["FAST-LIO"]
+    IMU1["/livox/imu"] --> FASTLIO
+    FASTLIO --> ODOM["/Odometry"]
+    FASTLIO --> CLOUD_REG["/cloud_registered_body"]
 
-    ODOM --> SL
-    CLOUD_REG --> SL
+    ODOM --> SLAM["rtabmap_slam"]
+    CLOUD_REG --> SLAM
+    SLAM --> MAP["/map"]
+    SLAM --> TF1["TF: map → odom"]
+    SLAM --> DB1["rtabmap.db"]
 
-    subgraph R1["fastlio_mapping.launch.py 当前实际主链"]
-        FASTLIO
-        subgraph RTAB_LAUNCH["IncludeLaunchDescription: rtabmap_launch/rtabmap.launch.py"]
-            SL["rtabmap_slam"]
-            VIZ["rtabmap_viz"]
-        end
+    subgraph GPS_OPT["可选: RTK GPS"]
+        RTK["bt468_rtk_node\n串口 NMEA"] --> FIX["/fix\nNavSatFix"]
+        FIX --> NAVSAT["navsat_transform_node"]
+        NAVSAT --> ODOM_GPS["/odometry/gps"]
     end
 
-    subgraph R2["RTAB-Map 代码级依赖"]
-        SL -.订阅/同步基类.-> SYNC_BASE["rtabmap_sync\nCommonDataSubscriber"]
-        SL -.消息接口.-> MSG["rtabmap_msgs"]
-        SL -.数据转换.-> CONV["rtabmap_conversions"]
-        SL -.地图/工具.-> UTIL["rtabmap_util"]
-    end
+    FIX -.-> SLAM
 ```
 
 - FAST-LIO 直接消费 `/livox/lidar` 和 `/livox/imu`，输出激光惯性紧耦合里程计 `/Odometry`，同时发布 `odom -> base_footprint` TF
 - FAST-LIO 还输出去运动畸变后的点云 `/cloud_registered_body`，供 RTAB-Map 做回环检测和建图
 - `rtabmap_slam` 消费 `/Odometry` 和 `/cloud_registered_body`，执行图优化并发布 `map -> odom` TF
-- 不再使用 `icp_odometry`、`robot_localization (EKF)` 等中间环节，链路更短更简洁
+- **可选**：启用 RTK 后，`/fix` 作为 GPS 弱约束传入 RTAB-Map，为大范围室外建图提供全局锚点，防止累积漂移
 
-### 2.2  关键数据流向
-
-```mermaid
-flowchart LR
-    subgraph A["fastlio_mapping.launch.py 当前实际数据流"]
-        CLOUD["/livox/lidar"] --> FASTLIO["FAST-LIO"]
-        IMU1["/livox/imu"] --> FASTLIO
-        FASTLIO --> ODOM["/Odometry"]
-        FASTLIO --> CLOUD_REG["/cloud_registered_body"]
-
-        ODOM --> SLAM["rtabmap_slam"]
-        CLOUD_REG --> SLAM
-        SLAM --> MAP["/map"]
-        SLAM --> TF1["TF: map → odom"]
-        SLAM --> DB1["rtabmap.db"]
-    end
-
-```
-
-最终 TF 主链：
+### 2.2  TF 主链
 
 ```text
 map → odom → base_footprint → base_link → livox_frame
  ↑      ↑        (static)       (static)
 rtabmap FAST-LIO
+
+                 base_link → gnss_link    (仅 enable_gps=true 时发布)
 ```
+
+## 3.导航过程
+
+导航统一入口为 `nav2.launch.py`，RTK GPS 为可选模式。
+
+```bash
+# 不带 GPS 导航
+ros2 launch robot_bringup nav2.launch.py
+
+# 带 RTK GPS 导航
+ros2 launch robot_bringup nav2.launch.py enable_gps:=true
+
+# 指定地图数据库
+ros2 launch robot_bringup nav2.launch.py database_path:=/data/maps/my_site/rtabmap.db
+```
+
+### 3.1  关键数据流向
+
+```mermaid
+flowchart LR
+    CLOUD["/livox/lidar"] --> FASTLIO["FAST-LIO"]
+    IMU["/livox/imu"] --> FASTLIO
+    FASTLIO --> ODOM["/Odometry"]
+    FASTLIO --> CLOUD_REG["/cloud_registered_body"]
+
+    ODOM --> SLAM["rtabmap_slam\n定位模式"]
+    CLOUD_REG --> SLAM
+    SLAM --> MAP["/map"]
+    SLAM --> TF_MAP["TF: map → odom"]
+
+    MAP --> NAV2["Nav2\n规划 + 控制"]
+    ODOM --> NAV2
+    NAV2 --> CMD["/cmd_vel"]
+
+    CMD --> CM["collision_monitor"]
+    CLOUD_REG --> CM
+    CM --> CMD_SAFE["/cmd_vel_safe\n→ 底盘"]
+
+    subgraph GPS_OPT["可选: RTK GPS"]
+        RTK["bt468_rtk_node"] --> FIX["/fix"]
+        FIX --> NAVSAT["navsat_transform_node"]
+    end
+
+    FIX -.-> SLAM
+```
+
+### 3.2  主要组件职责
+
+| 组件 | 职责 |
+|------|------|
+| FAST-LIO | 激光惯性里程计，发布 `/Odometry` 和去畸变点云 |
+| RTAB-Map（定位模式） | 基于已有 `rtabmap.db` 重定位，发布 `map -> odom` TF 和 `/map` |
+| Nav2 | 全局/局部规划 + 路径跟踪（MPPI 控制器）|
+| Collision Monitor | 碰撞安全层，将 `/cmd_vel` 过滤为 `/cmd_vel_safe` |
+| RTK GPS（可选） | 提供全局 GPS 约束，辅助重定位和防漂移 |
