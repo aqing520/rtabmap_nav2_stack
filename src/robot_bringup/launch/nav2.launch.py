@@ -109,7 +109,7 @@ def generate_launch_description() -> LaunchDescription:
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_footprint_to_base_link',
-        arguments=['0', '0', '0', '0', '0', '0', 'base_footprint', 'base_link'],
+        arguments=['-0.119', '0', '-0.01', '0', '0', '0', 'base_footprint', 'base_link'],
         condition=IfCondition(publish_base_link_tf),
     )
 
@@ -117,7 +117,7 @@ def generate_launch_description() -> LaunchDescription:
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_link_to_livox_frame',
-        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'livox_frame'],
+        arguments=['0.119', '0', '0.01', '0', '0', '0', 'base_link', 'livox_frame'],
     )
 
     gnss_tf = Node(
