@@ -25,7 +25,7 @@ bt_navigator:
       - nav2_wait_action_bt_node
       - nav2_assisted_teleop_action_bt_node
       - nav2_back_up_action_bt_node
-      - nav2_drive_on_heading_action_bt_node
+      - nav2_drive_on_heading_bt_node
       - nav2_clear_costmap_service_bt_node
       - nav2_is_stuck_condition_bt_node
       - nav2_goal_reached_condition_bt_node
@@ -113,16 +113,22 @@ controller_server:
       short_circuit_trajectory_evaluation: true
       stateful: true
       critics: ['RotateToGoal', 'Oscillation', 'BaseObstacle', 'GoalAlign', 'PathAlign', 'PathDist', 'GoalDist']
-      BaseObstacle.scale: 0.02
-      PathAlign.scale: 32.0
-      PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 24.0
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
-      GoalDist.scale: 24.0
-      RotateToGoal.scale: 32.0
-      RotateToGoal.slowing_factor: 5.0
-      RotateToGoal.lookahead_time: -1.0
+      BaseObstacle:
+        scale: 0.02
+      PathAlign:
+        scale: 32.0
+        forward_point_distance: 0.1
+      GoalAlign:
+        scale: 24.0
+        forward_point_distance: 0.1
+      PathDist:
+        scale: 32.0
+      GoalDist:
+        scale: 24.0
+      RotateToGoal:
+        scale: 32.0
+        slowing_factor: 5.0
+        lookahead_time: -1.0
 
 local_costmap:
   local_costmap:
