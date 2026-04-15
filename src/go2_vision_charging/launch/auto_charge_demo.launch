@@ -1,0 +1,53 @@
+<launch>
+    <!-- 相机视频流 -->
+    <node pkg="video_stream_opencv" type="video_stream" name="camera" output="screen" ns="camera">
+        <param name="camera_name" value="head_camera" />
+        <param name="video_stream_provider" value="rtsp://admin:Basic@2021@192.168.168.25:554/cam/realmonitor?channel=1&amp;subtype=0" />
+        <param name="set_camera_fps" value="false" />
+        <param name="buffer_queue_size" value="1" />
+        <param name="fps" value="30" />
+        <param name="frame_id" value="camera_link" />
+        <param name="camera_info_url" value="file://$(find go2_vision_charging)/config/camera_info.yaml" />
+        <param name="width" value="1920" />
+        <param name="height" value="1080" />
+    </node>
+
+    <!-- 相机外参静态 TF: base_link -> camera_link -->
+    <!-- 参数顺序: x y z yaw pitch roll -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_cam"
+          args="0.1 0 0.616 -1.5707 0 -1.5707 base_link camera_link" />
+
+    <!-- AprilTag 检测 -->
+    <node pkg="apriltag_ros" type="apriltag_ros_continuous_node" name="apriltag_ros_continuous_node" clear_params="true" output="screen">
+        <remap from="image_rect" to="/camera/image_raw" />
+        <remap from="camera_info" to="/camera/camera_info" />
+        <param name="publish_tag_detections_image" type="bool" value="true" />
+        <param name="queue_size" type="int" value="1" />
+        <rosparam command="load" file="$(find go2_vision_charging)/config/apriltag_settings.yaml"/>
+        <rosparam command="load" file="$(find go2_vision_charging)/config/apriltag_tags.yaml"/>
+    </node>
+
+    <!-- AprilTagDetectionArray -> PoseStamped -->
+    <node pkg="go2_vision_charging" type="apriltag_pose_bridge.py" name="apriltag_pose_bridge" output="screen">
+        <param name="target_tag_id" type="int" value="88" />
+    </node>
+
+    <!-- 位姿滤波 -->
+    <node pkg="go2_vision_charging" type="pose_filter.py" name="pose_filter" output="screen" />
+
+    <!-- 充电目标坐标转换 -->
+    <node pkg="go2_vision_charging" type="charging_pose_transformer.py" name="charging_pose_transformer" output="screen">
+        <rosparam command="load" file="$(find go2_vision_charging)/config/charging_params.yaml" />
+        <param name="use_map_frame" value="false" />
+    </node>
+
+    <!-- 视觉伺服控制 -->
+    <node pkg="go2_vision_charging" type="visual_servo_controller.py" name="visual_servo_controller" output="screen">
+        <rosparam command="load" file="$(find go2_vision_charging)/config/charging_params.yaml" />
+    </node>
+
+    <!-- 充电状态机 -->
+    <node pkg="go2_vision_charging" type="charging_state_machine.py" name="charging_state_machine" output="screen">
+        <rosparam command="load" file="$(find go2_vision_charging)/config/charging_params.yaml" />
+    </node>
+</launch>

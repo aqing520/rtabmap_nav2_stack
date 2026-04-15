@@ -1,0 +1,11 @@
+# AprilTag 3 检测参数（与 apriltag_ros 默认一致，见官方 config/settings.yaml）
+# https://github.com/AprilRobotics/apriltag_ros/blob/master/apriltag_ros/config/settings.yaml
+tag_family:        'tag36h11'
+tag_threads:       2
+tag_decimate:      1.0
+tag_blur:          0.0
+tag_refine_edges:  1
+tag_debug:         0
+max_hamming_dist:  2
+publish_tf:        true
+transport_hint:    "raw"
