@@ -5,7 +5,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(RTABMap REQUIRED)
+find_package(RTABMap 0.23.4 REQUIRED)
 MESSAGE(STATUS "RTABMap=${RTABMap_TARGETS}")
 
 find_package(ament_cmake REQUIRED)

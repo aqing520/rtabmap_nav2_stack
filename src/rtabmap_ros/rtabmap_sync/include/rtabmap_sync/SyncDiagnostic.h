@@ -17,8 +17,8 @@ namespace rtabmap_sync {
 class SyncDiagnostic {
     public:
         SyncDiagnostic(rclcpp::Node * node, double tolerance = 0.2, int windowSize = 5) :
-		node_(node),
-		diagnosticUpdater_(node, 2.0),
+			node_(node),
+			diagnosticUpdater_(node, 2.0),
 		inFrequencyStatus_(diagnostic_updater::FrequencyStatusParam(&inTargetFrequency_, &inTargetFrequency_, tolerance), node->get_clock()),
 		inTimeStampStatus_(diagnostic_updater::TimeStampStatusParam(), node->get_clock()),
         outFrequencyStatus_(diagnostic_updater::FrequencyStatusParam(&outTargetFrequency_, &outTargetFrequency_, tolerance), node->get_clock()),
@@ -27,19 +27,30 @@ class SyncDiagnostic {
         outCompositeTask_("Output Status"),
         lastTickInputStamp_(rtabmap_conversions::timestampFromROS(node_->now())-1),
         inTargetFrequency_(0.0),
-		outTargetFrequency_(0.0),
-		windowSize_(windowSize),
-        lastTickTime_(0.0)
-    {
-        UASSERT(windowSize_ >= 1);
-    }
+			outTargetFrequency_(0.0),
+			windowSize_(windowSize),
+	        lastTickTime_(0.0),
+	        enabled_(false)
+	    {
+	        UASSERT(windowSize_ >= 1);
+	    }
 
     void init(
         const std::string & topic,
         const std::string & topicsNotReceivedWarningMsg,
         std::vector<diagnostic_updater::DiagnosticTask*> otherTasks = std::vector<diagnostic_updater::DiagnosticTask*>())
-    {
-        topicsNotReceivedWarningMsg_ = topicsNotReceivedWarningMsg;
+	    {
+	        enabled_ = node_->declare_parameter("sync_diagnostics", false);
+	        if(!enabled_)
+	        {
+	            RCLCPP_WARN(
+	                node_->get_logger(),
+	                "%s: sync diagnostics disabled (sync_diagnostics=false) to avoid diagnostic updater crashes.",
+	                node_->get_name());
+	            return;
+	        }
+
+	        topicsNotReceivedWarningMsg_ = topicsNotReceivedWarningMsg;
 
         std::list<std::string> strList = uSplit(topic, '/');
         for(int i=0; i<2 && strList.size()>1; ++i)
@@ -62,10 +73,14 @@ class SyncDiagnostic {
         diagnosticTimer_ = node_->create_wall_timer(5s, std::bind(&SyncDiagnostic::diagnosticTimerCallback, this), nullptr);
     }
 
-    void tickInput(const rclcpp::Time & stamp, double expectedFrequency = 0.0)
-    {
-        updateFrequency(
-            stamp,
+	    void tickInput(const rclcpp::Time & stamp, double expectedFrequency = 0.0)
+	    {
+	        if(!enabled_)
+	        {
+	            return;
+	        }
+	        updateFrequency(
+	            stamp,
             expectedFrequency,
             inFrequencyStatus_,
             inTimeStampStatus_,
@@ -74,10 +89,14 @@ class SyncDiagnostic {
             lastTickInputStamp_);
     }
 
-    void tickOutput(const rclcpp::Time & stamp, double expectedFrequency = 0.0)
-    {
-        if(expectedFrequency == 0.0) {
-            outTargetFrequency_ = inTargetFrequency_;
+	    void tickOutput(const rclcpp::Time & stamp, double expectedFrequency = 0.0)
+	    {
+	        if(!enabled_)
+	        {
+	            return;
+	        }
+	        if(expectedFrequency == 0.0) {
+	            outTargetFrequency_ = inTargetFrequency_;
         }
         double lastTickOutputStamp = 0.0;
         updateFrequency(
@@ -90,10 +109,14 @@ class SyncDiagnostic {
             lastTickOutputStamp);
     }
 
-private:
-    void diagnosticTimerCallback()
-    {
-        UScopeMutex lock(tickMutex_);
+	private:
+	    void diagnosticTimerCallback()
+	    {
+	        if(!enabled_)
+	        {
+	            return;
+	        }
+	        UScopeMutex lock(tickMutex_);
         if(rtabmap_conversions::timestampFromROS(node_->now())-lastTickInputStamp_ >= 5 && !topicsNotReceivedWarningMsg_.empty())
         {
         	RCLCPP_WARN(node_->get_logger(), "%s", topicsNotReceivedWarningMsg_.c_str());
@@ -176,11 +199,12 @@ private:
     double outTargetFrequency_;
 	int windowSize_;
 	std::deque<double> inWindow_;
-    std::deque<double> outWindow_;
-    UMutex tickMutex_;
-    double lastTickTime_;
+	    std::deque<double> outWindow_;
+	    UMutex tickMutex_;
+	    double lastTickTime_;
+	    bool enabled_;
 
-};
+	};
 
 }
 

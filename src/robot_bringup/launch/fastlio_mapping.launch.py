@@ -56,8 +56,13 @@ def generate_launch_description() -> LaunchDescription:
         # RTAB-Map's loop closure and map generation will be much cleaner/sharper.
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body',
                               description='Input point cloud topic for RTAB-Map'),
-        DeclareLaunchArgument('imu_topic', default_value='/livox/imu',
-                              description='IMU topic (Livox MID360 onboard IMU)'),
+        DeclareLaunchArgument(
+            'imu_topic',
+            default_value='/unused_imu',
+            description='Optional RTAB-Map IMU topic. FAST-LIO still uses /livox/imu from its own config.',
+        ),
+        DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db',
+                              description='Path to save/load the RTAB-Map database'),
         DeclareLaunchArgument('frame_id', default_value='base_footprint',
                               description='Robot base frame'),
         DeclareLaunchArgument('odom_frame_id', default_value='',
@@ -67,7 +72,7 @@ def generate_launch_description() -> LaunchDescription:
     # ── 1. Livox MID360 driver ──
     livox_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([livox_share, 'launch', 'rviz_MID360_launch.py'])),
+            PathJoinSubstitution([livox_share, 'launch', 'msg_MID360_launch.py'])),
         condition=IfCondition(start_livox),
     )
 
@@ -105,6 +110,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             'use_sim_time': use_sim_time,
             'localization': 'false',
+            'database_path': LaunchConfiguration('database_path'),
             'frame_id': LaunchConfiguration('frame_id'),
             'odom_frame_id': LaunchConfiguration('odom_frame_id'),
             'publish_tf_map': 'true',
@@ -128,7 +134,7 @@ def generate_launch_description() -> LaunchDescription:
             'namespace': 'rtabmap',
             'args': PythonExpression([
                 "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
-                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04'"
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/3D false --Grid/NormalsSegmentation true --Grid/MaxObstacleHeight 2.0 --Grid/MinGroundHeight -0.3 --Grid/MaxGroundHeight 0.15 --Grid/RayTracing true'"
             ]),
         }.items(),
     )

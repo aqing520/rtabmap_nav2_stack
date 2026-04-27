@@ -8,17 +8,17 @@ Assumptions:
 - RTAB-Map is the only publisher of map -> odom.
 - FAST-LIO publishes odom -> base_footprint and /Odometry.
 - Nav2 consumes /map and /Odometry.
-- The base controller should subscribe to /cmd_vel_safe.
+- Nav2 outputs /cmd_vel_nav → collision_monitor filters → /cmd_vel → wheeltec hardware.
 """
 
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -43,19 +43,24 @@ def generate_launch_description() -> LaunchDescription:
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
         DeclareLaunchArgument('mode', default_value='navigation', description='mapping | localization | navigation'),
-        DeclareLaunchArgument('sensor_profile', default_value='lidar_rgbd', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
+        DeclareLaunchArgument('sensor_profile', default_value='lidar_only', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('autostart', default_value='true'),
         DeclareLaunchArgument('start_livox', default_value='true', description='Start Livox MID360 launch'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
-        DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz through the RTAB-Map bridge'),
+        DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
+        DeclareLaunchArgument('rtabmap_args', default_value=''),
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
         DeclareLaunchArgument('rtabmap_odom_topic', default_value='/Odometry'),
-        DeclareLaunchArgument('imu_topic', default_value='/livox/imu'),
+        DeclareLaunchArgument(
+            'imu_topic',
+            default_value='/unused_imu',
+            description='Optional IMU topic for RTAB-Map and navsat_transform when GPS is enabled.',
+        ),
         DeclareLaunchArgument('gps_fix_topic', default_value='/sensors/gps/fix'),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
     ]
@@ -128,31 +133,49 @@ def generate_launch_description() -> LaunchDescription:
             'use_sim_time': use_sim_time,
             'sensor_profile': sensor_profile,
             'enable_gps': enable_gps,
-            'localization': PythonExpression(["'", mode, "' != 'mapping'"]),
+            'localization': PythonExpression(["'true' if '", mode, "' != 'mapping' else 'false'"]),
             'database_path': database_path,
+            'rtabmap_args': LaunchConfiguration('rtabmap_args'),
             'frame_id': LaunchConfiguration('rtabmap_frame_id'),
             'map_frame_id': LaunchConfiguration('rtabmap_map_frame'),
             'odom_topic': LaunchConfiguration('rtabmap_odom_topic'),
             'imu_topic': LaunchConfiguration('imu_topic'),
             'gps_topic': LaunchConfiguration('gps_fix_topic'),
             'scan_cloud_topic': LaunchConfiguration('scan_cloud_topic'),
-            'rviz': enable_rviz,
+            'rviz': 'false',
         }.items(),
     )
 
+    # ── 5b. RViz with Nav2 navigation config ──
+    nav2_rviz_config = PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_navigation.rviz'])
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        condition=IfCondition(enable_rviz),
+        arguments=['-d', nav2_rviz_config],
+    )
+
     # ── 6. Nav2 ──
-    nav2_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(PathJoinSubstitution([nav2_bringup_share, 'launch', 'navigation_launch.py'])),
+    # Remap /cmd_vel → /cmd_vel_nav so collision_monitor can intercept before the hardware.
+    nav2_launch = GroupAction(
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
-        launch_arguments={
-            'namespace': namespace,
-            'use_sim_time': use_sim_time,
-            'autostart': autostart,
-            'params_file': nav2_params_file,
-            'use_composition': 'False',
-            'use_respawn': 'False',
-            'log_level': 'info',
-        }.items(),
+        actions=[
+            SetRemap('/cmd_vel', '/cmd_vel_nav'),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(PathJoinSubstitution([nav2_bringup_share, 'launch', 'navigation_launch.py'])),
+                launch_arguments={
+                    'namespace': namespace,
+                    'use_sim_time': use_sim_time,
+                    'autostart': autostart,
+                    'params_file': nav2_params_file,
+                    'use_composition': 'False',
+                    'use_respawn': 'False',
+                    'log_level': 'info',
+                }.items(),
+            ),
+        ],
     )
 
     # ── 7. Collision Monitor ──
@@ -166,8 +189,8 @@ def generate_launch_description() -> LaunchDescription:
             'use_sim_time': use_sim_time,
             'base_frame_id': 'base_footprint',
             'odom_frame_id': 'odom',
-            'cmd_vel_in_topic': '/cmd_vel',
-            'cmd_vel_out_topic': '/cmd_vel_safe',
+            'cmd_vel_in_topic': '/cmd_vel_nav',
+            'cmd_vel_out_topic': '/cmd_vel',
             'transform_tolerance': 0.3,
             'source_timeout': 1.0,
             'base_shift_correction': True,
@@ -197,6 +220,19 @@ def generate_launch_description() -> LaunchDescription:
         }],
     )
 
+    collision_monitor_lifecycle = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_collision_monitor',
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': autostart,
+            'node_names': ['collision_monitor'],
+        }],
+    )
+
     # ── Assemble ──
     ld = LaunchDescription()
     ld.add_action(SetEnvironmentVariable('RCUTILS_LOGGING_BUFFERED_STREAM', '1'))
@@ -219,6 +255,8 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(fast_lio_launch)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
+    ld.add_action(rviz_node)
     ld.add_action(nav2_launch)
     ld.add_action(collision_monitor)
+    ld.add_action(collision_monitor_lifecycle)
     return ld

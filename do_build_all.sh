@@ -6,7 +6,7 @@ ROS_DISTRO_NAME="${ROS_DISTRO_NAME:-humble}"
 JOBS="${JOBS:-8}"
 WORKERS="${WORKERS:-4}"
 HEAVY_JOBS="${HEAVY_JOBS:-1}"
-CLEAN_BUILD="${CLEAN_BUILD:-1}"
+CLEAN_BUILD="${CLEAN_BUILD:-0}"
 INSTALL_DEPS="${INSTALL_DEPS:-0}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 
@@ -130,15 +130,16 @@ OVERRIDES=(
 )
 
 BASE_PACKAGES=(
-  rtabmap rtabmap_msgs rtabmap_costmap_plugins rtabmap_python rtabmap_conversions
+  livox_ros_driver2 rtabmap_msgs rtabmap_costmap_plugins rtabmap_python rtabmap_conversions
 )
 
 HEAVY_PACKAGES=(
-  rtabmap_sync rtabmap_viz rtabmap_rviz_plugins
+  fast_lio rtabmap_sync rtabmap_viz rtabmap_rviz_plugins
 )
 
 REST_PACKAGES=(
   rtabmap_util rtabmap_odom rtabmap_slam rtabmap_launch rtabmap_examples rtabmap_demos rtabmap_ros
+  rtsp_camera_bridge robot_bringup
 )
 
 CMAKE_ARGS=(

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RTABMAP_SRC_DIR="$ROOT_DIR/third_party/rtabmap-0.23.4"
+RTABMAP_BUILD_DIR="$RTABMAP_SRC_DIR/build_local"
+RTABMAP_INSTALL_DIR="$RTABMAP_SRC_DIR/install"
+ROS_DISTRO_NAME="${ROS_DISTRO_NAME:-humble}"
+JOBS="${JOBS:-4}"
+BUILD_TYPE="${BUILD_TYPE:-Release}"
+RTABMAP_OPENCV_DIR="${RTABMAP_OPENCV_DIR:-${OpenCV_DIR:-}}"
+
+if [[ ! -d "$RTABMAP_SRC_DIR" ]]; then
+  echo "[ERROR] RTABMap source dir not found: $RTABMAP_SRC_DIR" >&2
+  exit 1
+fi
+
+if [[ ! -f "/opt/ros/${ROS_DISTRO_NAME}/setup.bash" ]]; then
+  echo "[ERROR] ROS distro not found: /opt/ros/${ROS_DISTRO_NAME}/setup.bash" >&2
+  exit 2
+fi
+
+if [[ -z "$RTABMAP_OPENCV_DIR" || ! -f "$RTABMAP_OPENCV_DIR/OpenCVConfig.cmake" ]]; then
+  echo "[ERROR] Invalid OpenCV dir: ${RTABMAP_OPENCV_DIR:-<empty>}" >&2
+  exit 3
+fi
+
+mkdir -p "$RTABMAP_BUILD_DIR" "$RTABMAP_INSTALL_DIR"
+
+echo "[INFO] RTABMap src    : $RTABMAP_SRC_DIR"
+echo "[INFO] RTABMap build  : $RTABMAP_BUILD_DIR"
+echo "[INFO] RTABMap install: $RTABMAP_INSTALL_DIR"
+echo "[INFO] OpenCV_DIR     : $RTABMAP_OPENCV_DIR"
+echo "[INFO] Jobs           : $JOBS"
+echo "[INFO] Build type     : $BUILD_TYPE"
+
+set +u
+source "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
+set -u
+
+cmake -S "$RTABMAP_SRC_DIR" -B "$RTABMAP_BUILD_DIR" \
+  -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+  -DCMAKE_INSTALL_PREFIX="$RTABMAP_INSTALL_DIR" \
+  -DOpenCV_DIR="$RTABMAP_OPENCV_DIR" \
+  -DBUILD_APP=OFF \
+  -DBUILD_TOOLS=OFF \
+  -DBUILD_EXAMPLES=OFF \
+  -DWITH_PDAL=OFF \
+  -DWITH_LIBLAS=OFF \
+  -DWITH_CUDASIFT=OFF \
+  -DWITH_FREENECT=OFF \
+  -DWITH_FREENECT2=OFF \
+  -DWITH_K4W2=OFF \
+  -DWITH_K4A=OFF \
+  -DWITH_OPENNI=OFF \
+  -DWITH_OPENNI2=OFF \
+  -DWITH_DC1394=OFF \
+  -DWITH_CVSBA=OFF \
+  -DWITH_CCCORELIB=OFF \
+  -DWITH_OPEN3D=OFF \
+  -DWITH_LOAM=OFF \
+  -DWITH_FLOAM=OFF \
+  -DWITH_GRIDMAP=OFF \
+  -DWITH_CPUTSDF=OFF \
+  -DWITH_OPENCHISEL=OFF \
+  -DWITH_ALICE_VISION=OFF \
+  -DWITH_FOVIS=OFF \
+  -DWITH_VISO2=OFF \
+  -DWITH_DVO=OFF \
+  -DWITH_ORB_SLAM=OFF \
+  -DWITH_OKVIS=OFF \
+  -DWITH_MSCKF_VIO=OFF \
+  -DWITH_VINS_FUSION=OFF \
+  -DWITH_OPENVINS=OFF \
+  -DWITH_CUVSLAM=OFF \
+  -DWITH_REALSENSE=OFF \
+  -DWITH_REALSENSE_SLAM=OFF \
+  -DWITH_REALSENSE2=OFF \
+  -DWITH_MYNTEYE=OFF \
+  -DWITH_DEPTHAI=OFF \
+  -DWITH_XVSDK=OFF \
+  -DWITH_ORBBEC_SDK=OFF
+
+cmake --build "$RTABMAP_BUILD_DIR" --parallel "$JOBS"
+cmake --install "$RTABMAP_BUILD_DIR"
+
+echo "[DONE] RTABMap 0.23.4 installed to $RTABMAP_INSTALL_DIR"
