@@ -34,6 +34,7 @@ def generate_launch_description() -> LaunchDescription:
     rviz = LaunchConfiguration('rviz')
     rtabmap_viz = LaunchConfiguration('rtabmap_viz')
     delete_db_on_start = LaunchConfiguration('delete_db_on_start')
+    fast_lio_config_file = LaunchConfiguration('fast_lio_config_file')
 
     livox_share = FindPackageShare('livox_ros_driver2')
     rtabmap_launch_share = FindPackageShare('rtabmap_launch')
@@ -63,6 +64,11 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db',
                               description='Path to save/load the RTAB-Map database'),
+        DeclareLaunchArgument(
+            'fast_lio_config_file',
+            default_value='mid360_save.yaml',
+            description='FAST-LIO config file. The default enables raw accumulated PCD saving.',
+        ),
         DeclareLaunchArgument('frame_id', default_value='base_footprint',
                               description='Robot base frame'),
         DeclareLaunchArgument('odom_frame_id', default_value='',
@@ -98,7 +104,7 @@ def generate_launch_description() -> LaunchDescription:
             PathJoinSubstitution([fast_lio_share, 'launch', 'mapping.launch.py'])),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'config_file': 'mid360.yaml',
+            'config_file': fast_lio_config_file,
             'rviz': 'false', # Disable FAST-LIO's separate RViz to prevent conflict
         }.items(),
     )
@@ -134,7 +140,7 @@ def generate_launch_description() -> LaunchDescription:
             'namespace': 'rtabmap',
             'args': PythonExpression([
                 "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
-                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/3D false --Grid/NormalsSegmentation true --Grid/MaxObstacleHeight 2.0 --Grid/MinGroundHeight -0.3 --Grid/MaxGroundHeight 0.15 --Grid/RayTracing true'"
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/3D false --Grid/NormalsSegmentation true --Grid/RangeMin 0.5 --Grid/RangeMax 5.0 --Grid/FootprintLength 0.55 --Grid/FootprintWidth 0.45 --Grid/MinClusterSize 20 --Grid/NoiseFilteringRadius 0.18 --Grid/NoiseFilteringMinNeighbors 5 --Grid/MaxObstacleHeight 1.2 --Grid/MinGroundHeight -0.3 --Grid/MaxGroundHeight 0.15 --Grid/RayTracing true'"
             ]),
         }.items(),
     )

@@ -21,6 +21,41 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
+DEFAULT_RTABMAP_ARGS = (
+    "--Reg/Strategy 1 "
+
+    "--RGBD/ProximityBySpace true "
+
+    "--Mem/NotLinkedNodesKept false "
+
+    "--RGBD/StartAtOrigin true "
+
+    "--Icp/VoxelSize 0.05 "
+    "--Icp/DownsamplingStep 1 "
+    
+    "--Icp/MaxTranslation 10 "
+    
+    "--Icp/MaxRotation 0.7 "
+    "--Icp/MaxCorrespondenceDistance 0.5 "
+    "--Icp/CorrespondenceRatio 0.05 "
+    "--Icp/PointToPlane true "
+    "--Icp/PointToPlaneK 15 "
+    "--Icp/PointToPlaneMinComplexity 0.04 "
+    "--Grid/3D false "
+    "--Grid/NormalsSegmentation true "
+    "--Grid/RangeMin 0.5 "
+    "--Grid/RangeMax 5.0 "
+    "--Grid/FootprintLength 0.55 "
+    "--Grid/FootprintWidth 0.45 "
+    "--Grid/MinClusterSize 20 "
+    "--Grid/NoiseFilteringRadius 0.18 "
+    "--Grid/NoiseFilteringMinNeighbors 5 "
+    "--Grid/MaxObstacleHeight 1.2 "
+    "--Grid/MinGroundHeight -0.3 "
+    "--Grid/MaxGroundHeight 0.15 "
+    "--Grid/RayTracing true"
+)
+
 
 def generate_launch_description() -> LaunchDescription:
     namespace = LaunchConfiguration('namespace')
@@ -51,7 +86,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
-        DeclareLaunchArgument('rtabmap_args', default_value=''),
+        DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
@@ -198,24 +233,24 @@ def generate_launch_description() -> LaunchDescription:
             'polygons': ['StopZone', 'SlowZone'],
             'observation_sources': ['pointcloud'],
             'StopZone.type': 'polygon',
-            'StopZone.points': [0.35, 0.30, 0.35, -0.30, -0.10, -0.30, -0.10, 0.30],
+            'StopZone.points': [0.30, 0.24, 0.30, -0.24, -0.10, -0.24, -0.10, 0.24],
             'StopZone.action_type': 'stop',
             'StopZone.max_points': 3,
             'StopZone.visualize': True,
             'StopZone.polygon_pub_topic': 'collision_monitor/stop_zone',
             'StopZone.enabled': True,
             'SlowZone.type': 'polygon',
-            'SlowZone.points': [0.55, 0.40, 0.55, -0.40, -0.25, -0.40, -0.25, 0.40],
+            'SlowZone.points': [0.80, 0.38, 0.80, -0.38, -0.20, -0.38, -0.20, 0.38],
             'SlowZone.action_type': 'slowdown',
             'SlowZone.max_points': 3,
-            'SlowZone.slowdown_ratio': 0.35,
+            'SlowZone.slowdown_ratio': 0.45,
             'SlowZone.visualize': True,
             'SlowZone.polygon_pub_topic': 'collision_monitor/slow_zone',
             'SlowZone.enabled': True,
             'pointcloud.type': 'pointcloud',
             'pointcloud.topic': '/cloud_registered_body',
-            'pointcloud.min_height': 0.05,
-            'pointcloud.max_height': 1.80,
+            'pointcloud.min_height': 0.12,
+            'pointcloud.max_height': 1.20,
             'pointcloud.enabled': True,
         }],
     )

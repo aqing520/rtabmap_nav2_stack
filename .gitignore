@@ -50,6 +50,12 @@ third_party/rtabmap-0.23.4/.cproject
 third_party/rtabmap-0.23.4/.dockerignore
 
 frames.*
-cloud_map/*.pcd
-cloud_map/*.ply 
-bags
+cloud_map/
+bags/
+
+# Runtime text dumps / sensor logs
+/map_odom*.txt
+/*_log.txt
+/livox_*.txt
+/lidar_once.txt
+src/FAST_LIO_ROS2/Log/*.txt

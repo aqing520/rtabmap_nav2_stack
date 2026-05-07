@@ -1167,13 +1167,10 @@ int main(int argc, char** argv)
     /**************** save map ****************/
     /* 1. make sure you have enough memories
     /* 2. pcd save will largely influence the real-time performences **/
-    if (pcl_wait_save->size() > 0 && pcd_save_en)
+    if (pcl_wait_pub->size() > 0 && pcd_save_en)
     {
-        string file_name = string("scans.pcd");
-        string all_points_dir(string(string(ROOT_DIR) + "PCD/") + file_name);
-        pcl::PCDWriter pcd_writer;
-        cout << "current scan saved to /PCD/" << file_name<<endl;
-        pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
+        cout << "current accumulated map saved to " << map_file_path << endl;
+        save_to_pcd();
     }
 
     if (runtime_pos_log)

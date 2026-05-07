@@ -13,6 +13,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /Odometry
+    default_nav_to_pose_bt_xml: /home/wheeltec/xz/rtabmap_nav2_stack/src/robot_bringup/config/navigate_to_pose_clear_costmaps_on_goal_start.xml
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -75,8 +76,8 @@ controller_server:
 
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
-      required_movement_radius: 0.15
-      movement_time_allowance: 15.0
+      required_movement_radius: 0.05
+      movement_time_allowance: 40.0
 
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
@@ -94,23 +95,36 @@ controller_server:
       regenerate_noises: false
       visualize: false
       motion_model: DiffDrive
-      vx_max: 0.50
-      vx_min: -0.20
+      vx_max: 0.45
+      vx_min: 0.0
       vy_max: 0.0
       wz_max: 1.50
-      vx_std: 0.10
+      vx_std: 0.15
       vy_std: 0.0
-      wz_std: 0.20
+      wz_std: 0.30
       temperature: 0.40
       gamma: 0.02
       transform_tolerance: 0.5
       critics:
+        - ConstraintCritic
         - GoalCritic
         - GoalAngleCritic
         - PathAlignCritic
         - PathFollowCritic
+        - PathAngleCritic
         - ObstaclesCritic
         - TwirlingCritic
+      PathAlignCritic:
+        cost_weight: 5.0
+      PathFollowCritic:
+        cost_weight: 3.0
+      PathAngleCritic:
+        cost_weight: 4.0
+      ObstaclesCritic:
+        repulsion_weight: 3.0
+        critical_weight: 25.0
+        collision_cost: 100000.0
+        consider_footprint: false
 
 local_costmap:
   local_costmap:
@@ -135,7 +149,7 @@ local_costmap:
         origin_z: -0.5
         z_resolution: 0.15
         z_voxels: 16
-        max_obstacle_height: 2.0
+        max_obstacle_height: 1.50
         mark_threshold: 0
         observation_sources: lidar_cloud
         lidar_cloud:
@@ -144,15 +158,15 @@ local_costmap:
           clearing: true
           marking: true
           min_obstacle_height: 0.05
-          max_obstacle_height: 1.80
+          max_obstacle_height: 1.20
           raytrace_min_range: 0.0
           raytrace_max_range: 3.5
           obstacle_min_range: 0.0
           obstacle_max_range: 3.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.35
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.45
       always_send_full_costmap: true
 
 global_costmap:
@@ -180,7 +194,7 @@ global_costmap:
         origin_z: -0.5
         z_resolution: 0.15
         z_voxels: 16
-        max_obstacle_height: 2.0
+        max_obstacle_height: 1.50
         mark_threshold: 0
         observation_sources: lidar_cloud
         lidar_cloud:
@@ -189,15 +203,15 @@ global_costmap:
           clearing: true
           marking: true
           min_obstacle_height: 0.05
-          max_obstacle_height: 1.80
+          max_obstacle_height: 1.20
           raytrace_min_range: 0.0
           raytrace_max_range: 5.0
           obstacle_min_range: 0.0
           obstacle_max_range: 4.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.35
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.70
       always_send_full_costmap: true
 
 planner_server:
@@ -263,11 +277,11 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: OPEN_LOOP
-    max_velocity: [0.50, 0.0, 1.50]
-    min_velocity: [-0.20, 0.0, -1.50]
-    max_accel: [1.50, 0.0, 2.50]
-    max_decel: [-1.50, 0.0, -2.50]
+    max_velocity: [0.45, 0.0, 1.20]
+    min_velocity: [-0.05, 0.0, -1.20]
+    max_accel: [0.80, 0.0, 1.80]
+    max_decel: [-1.20, 0.0, -2.20]
     odom_topic: /Odometry
     odom_duration: 0.10
-    deadband_velocity: [0.0, 0.0, 0.0]
+    deadband_velocity: [0.05, 0.0, 0.02]
     velocity_timeout: 1.0
