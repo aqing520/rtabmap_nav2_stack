@@ -59,3 +59,9 @@ bags/
 /livox_*.txt
 /lidar_once.txt
 src/FAST_LIO_ROS2/Log/*.txt
+
+# Research papers and demo materials (not needed for build/run)
+src/FAST_LIO_ROS2/include/ikd-Tree/documents/
+src/FAST_LIO_ROS2/include/ikd-Tree/materials/
+third_party/rtabmap-0.23.4/archive/
+third_party/rtabmap-0.23.4/data/check-108.pdf
