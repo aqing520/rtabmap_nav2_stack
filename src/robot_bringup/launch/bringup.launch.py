@@ -33,7 +33,7 @@ DEFAULT_RTABMAP_ARGS = (
     "--Icp/VoxelSize 0.05 "
     "--Icp/DownsamplingStep 1 "
     
-    "--Icp/MaxTranslation 10 "
+    "--Icp/MaxTranslation 1.5 "
     
     "--Icp/MaxRotation 0.7 "
     "--Icp/MaxCorrespondenceDistance 0.5 "
@@ -41,18 +41,23 @@ DEFAULT_RTABMAP_ARGS = (
     "--Icp/PointToPlane true "
     "--Icp/PointToPlaneK 15 "
     "--Icp/PointToPlaneMinComplexity 0.04 "
+    "--Grid/CellSize 0.05 "
+    "--Grid/PreVoxelFiltering true "
     "--Grid/3D false "
     "--Grid/NormalsSegmentation true "
-    "--Grid/RangeMin 0.5 "
-    "--Grid/RangeMax 5.0 "
+    "--Grid/NormalK 20 "
+    "--Grid/MaxGroundAngle 45 "
+    "--Grid/ClusterRadius 0.12 "
+    "--Grid/RangeMin 0.1 "
+    "--Grid/RangeMax 20.0 "
     "--Grid/FootprintLength 0.55 "
     "--Grid/FootprintWidth 0.45 "
     "--Grid/MinClusterSize 20 "
     "--Grid/NoiseFilteringRadius 0.18 "
     "--Grid/NoiseFilteringMinNeighbors 5 "
-    "--Grid/MaxObstacleHeight 1.2 "
-    "--Grid/MinGroundHeight -0.3 "
-    "--Grid/MaxGroundHeight 0.15 "
+    "--Grid/MaxObstacleHeight 1.8 "
+    "--Grid/MinGroundHeight -0.6 "
+    "--Grid/MaxGroundHeight 0.25 "
     "--Grid/RayTracing true"
 )
 
@@ -64,6 +69,7 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = LaunchConfiguration('autostart')
     start_livox = LaunchConfiguration('start_livox')
+    start_fastlio = LaunchConfiguration('start_fastlio')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
@@ -82,6 +88,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('autostart', default_value='true'),
         DeclareLaunchArgument('start_livox', default_value='true', description='Start Livox MID360 launch'),
+        DeclareLaunchArgument('start_fastlio', default_value='true', description='Start FAST-LIO odometry'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
@@ -98,6 +105,8 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument('gps_fix_topic', default_value='/sensors/gps/fix'),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
+        DeclareLaunchArgument('rtk_port', default_value='auto', description='BT-468 serial port, e.g. /dev/ttyUSB0 or "auto"'),
+        DeclareLaunchArgument('rtk_baud', default_value='38400', description='BT-468 baud rate'),
     ]
 
     # ── 1. Livox MID360 driver ──
@@ -131,9 +140,30 @@ def generate_launch_description() -> LaunchDescription:
             'config_file': 'mid360.yaml',
             'rviz': 'false',
         }.items(),
+        condition=IfCondition(start_fastlio),
     )
 
-    # ── 4. GPS (optional, requires robot_localization installed separately) ──
+    # ── 4. BT-468 RTK driver (started when enable_gps=true) ──
+    btk_rtk_node = Node(
+        package='bt468_rtk_driver',
+        executable='bt468_rtk_node',
+        name='bt468_rtk_node',
+        output='screen',
+        condition=IfCondition(enable_gps),
+        parameters=[{
+            'port': LaunchConfiguration('rtk_port'),
+            'baud': LaunchConfiguration('rtk_baud'),
+            'timeout_sec': 0.2,
+            'reconnect_delay_sec': 1.0,
+            'frame_id': 'gnss_link',
+            'log_summary': True,
+        }],
+        remappings=[
+            ('fix', LaunchConfiguration('gps_fix_topic')),
+        ],
+    )
+
+    # ── 4b. GPS fusion (optional, requires robot_localization installed separately) ──
     navsat_transform = Node(
         package='robot_localization',
         executable='navsat_transform_node',
@@ -288,6 +318,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(livox_tf)
     ld.add_action(livox_launch)
     ld.add_action(fast_lio_launch)
+    ld.add_action(btk_rtk_node)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
     ld.add_action(rviz_node)
