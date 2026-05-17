@@ -203,7 +203,7 @@ def write_ply_ascii(filename, points):
 
 
 def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.ros/rtabmap.db")
+    db_path = sys.argv[1] if len(sys.argv) > 1 else "/data/maps/site_a/rtabmap.db"
     output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cloud_map")
     os.makedirs(output_dir, exist_ok=True)
 
