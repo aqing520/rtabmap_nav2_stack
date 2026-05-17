@@ -53,60 +53,42 @@ def find_latest_pcd(directory: str) -> str:
     return files[-1]
 
 
-def load_pcd_as_cloud2(pcd_path: str) -> PointCloud2:
-    """Read binary PCD (x y z [intensity]) → sensor_msgs/PointCloud2."""
-    with open(pcd_path, "rb") as f:
-        raw = f.read()
+def load_pcd_as_cloud2(pcd_path: str, voxel_size: float = 0.2) -> PointCloud2:
+    """Load PCD, pre-downsample with open3d, return xyz-only PointCloud2.
 
-    header_end = raw.find(b"\nDATA ")
-    header_text = raw[:header_end].decode("ascii", errors="ignore")
-    data_line_end = raw.find(b"\n", header_end + 1)
-    data_start = data_line_end + 1
+    Pre-downsampling avoids sending millions of raw points over the ROS2
+    service — the hdl node would downsample them anyway.
+    """
+    import open3d as o3d
 
-    fields, sizes, types_str, counts = [], [], [], []
-    n_points = 0
-    for line in header_text.splitlines():
-        parts = line.split()
-        if not parts:
-            continue
-        key = parts[0].upper()
-        if key == "FIELDS":   fields    = parts[1:]
-        elif key == "SIZE":   sizes     = [int(x) for x in parts[1:]]
-        elif key == "TYPE":   types_str = parts[1:]
-        elif key == "COUNT":  counts    = [int(x) for x in parts[1:]]
-        elif key == "POINTS": n_points  = int(parts[1])
+    pcd = o3d.io.read_point_cloud(pcd_path)
+    n_raw = len(pcd.points)
+    pcd_down = pcd.voxel_down_sample(voxel_size)
+    n_down = len(pcd_down.points)
+    print(f"[map] {n_raw} pts → {n_down} pts (voxel={voxel_size}m)")
 
-    dtype_map = {"F": {4: np.float32, 8: np.float64},
-                 "I": {1: np.int8,   2: np.int16,   4: np.int32},
-                 "U": {1: np.uint8,  2: np.uint16,  4: np.uint32}}
-    ros_dtype = {"F": {4: PointField.FLOAT32, 8: PointField.FLOAT64},
-                 "I": {1: PointField.INT8,    2: PointField.INT16,   4: PointField.INT32},
-                 "U": {1: PointField.UINT8,   2: PointField.UINT16,  4: PointField.UINT32}}
+    xyz = np.asarray(pcd_down.points, dtype=np.float32)
 
     msg = PointCloud2()
     msg.header.frame_id = "map"
     msg.height = 1
-    msg.width  = n_points
+    msg.width  = n_down
     msg.is_bigendian = False
     msg.is_dense     = True
 
-    offset = 0
-    ros_fields = []
-    for name, size, t, count in zip(fields, sizes, types_str, counts):
-        for c in range(count):
-            fname = name if count == 1 else f"{name}_{c}"
-            pf = PointField()
-            pf.name     = fname
-            pf.offset   = offset
-            pf.datatype = ros_dtype[t][size]
-            pf.count    = 1
-            ros_fields.append(pf)
-            offset += size
+    fields = []
+    for i, name in enumerate(["x", "y", "z"]):
+        pf = PointField()
+        pf.name     = name
+        pf.offset   = i * 4
+        pf.datatype = PointField.FLOAT32
+        pf.count    = 1
+        fields.append(pf)
 
-    msg.fields     = ros_fields
-    msg.point_step = offset
-    msg.row_step   = offset * n_points
-    msg.data       = list(raw[data_start: data_start + offset * n_points])
+    msg.fields     = fields
+    msg.point_step = 12  # 3 × float32
+    msg.row_step   = 12 * n_down
+    msg.data       = xyz.tobytes()
     return msg
 
 

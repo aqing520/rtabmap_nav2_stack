@@ -110,3 +110,116 @@ map → odom → base_footprint → base_link → livox_frame
  ↑      ↑        (static)       (static)
 rtabmap FAST-LIO
 ```
+
+## 3. 全局重定位与导航启动
+
+### 3.1 新增文件说明
+
+| 文件 | 说明 |
+|---|---|
+| `src/hdl_global_localization-humble/` | HDL 全局定位 C++ 包（ROS2 Humble 适配版），提供 FPFH+RANSAC 点云匹配服务 |
+| `scripts/extract_pcd_from_db.py` | 从 `rtabmap.db` 导出全局点云地图为 PCD 文件 |
+| `scripts/global_localization_node.py` | Python 客户端：加载地图 PCD → 调用 HDL 定位服务 → 发布 `/initialpose` |
+| `scripts/start_with_global_localization.sh` | **一键启动脚本**，完成三阶段全自动导航启动 |
+
+### 3.2 整体流程
+
+```mermaid
+flowchart TD
+    A["bash start_with_global_localization.sh"] --> B
+
+    subgraph B["Phase 1：完整导航栈启动"]
+        B1["Livox MID360 驱动"]
+        B2["FAST-LIO 里程计"]
+        B3["RTAB-Map 定位模式\n(从 rtabmap.db 加载地图)"]
+        B4["Nav2\n(autostart=false，暂不激活)"]
+        B5["hdl_global_localization_node"]
+    end
+
+    B --> C
+
+    subgraph C["Phase 2：全局重定位"]
+        C1["加载地图 PCD\n(open3d 预降采样 → ~9000点)"]
+        C2["发送至 HDL 节点\nFPFH 特征提取 + RANSAC 匹配"]
+        C3["订阅 /cloud_registered_body\n获取当前扫描"]
+        C4["计算机器人在地图中的位姿\nx, y, yaw"]
+        C5["发布 /initialpose\nRTAB-Map 收到后重置定位位置"]
+        C1 --> C2 --> C3 --> C4 --> C5
+    end
+
+    C --> D
+
+    subgraph D["Phase 3：激活导航"]
+        D1["Nav2 lifecycle manager STARTUP\n激活规划器、控制器、代价地图"]
+    end
+
+    D --> E["系统就绪，可接受导航目标点"]
+```
+
+### 3.3 前置条件：导出全局地图
+
+**建图完成后执行一次**，后续无需重复（地图不变则 PCD 不变）：
+
+```bash
+python3 scripts/extract_pcd_from_db.py
+# 输出到 cloud_map/rtabmap_<timestamp>_cloud.pcd
+```
+
+> 默认读取 `/data/maps/site_a/rtabmap.db`，可通过参数指定：
+> `python3 scripts/extract_pcd_from_db.py /path/to/rtabmap.db`
+
+### 3.4 启动导航
+
+```bash
+bash scripts/start_with_global_localization.sh
+```
+
+可选参数：
+
+```bash
+# 指定地图数据库
+bash scripts/start_with_global_localization.sh --db /data/maps/site_a/rtabmap.db
+
+# 开启 RViz
+bash scripts/start_with_global_localization.sh --rviz
+```
+
+### 3.5 关键话题与 TF
+
+| 话题 / TF | 发布者 | 说明 |
+|---|---|---|
+| `/cloud_registered_body` | FAST-LIO | 当前帧去畸变点云（用于全局定位匹配） |
+| `/initialpose` | global_localization_node.py | 全局定位结果，RTAB-Map 订阅后重置位置 |
+| `map → odom` TF | RTAB-Map | 接收 `/initialpose` 后从正确位置发布 |
+| `odom → base_footprint` TF | FAST-LIO | 连续里程计 |
+
+### 3.6 重定位算法说明
+
+使用 **FPFH + RANSAC** 三维点云全局配准（hdl_global_localization FPFH_RANSAC 引擎）：
+
+1. 对全局地图 PCD 提取 FPFH（Fast Point Feature Histogram）33维局部几何特征
+2. 对当前 LiDAR 扫描同样提取 FPFH
+3. RANSAC 随机采样特征对应关系，SVD 求解刚体变换
+4. 输出机器人在地图坐标系下的 `(x, y, yaw)`，`z/roll/pitch` 强制为 0（地面机器人）
+
+关键参数（已针对室内 ~15m 场景调优）：
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| 地图降采样分辨率 | 0.2m | 在 Python 端预处理，避免传输大消息 |
+| 法向量估计半径 | 0.5m | 适合室内尺度 |
+| FPFH 搜索半径 | 1.5m | 保证特征区分度 |
+
+### 3.7 重定位耗时参考
+
+| 阶段 | 耗时 |
+|---|---|
+| Phase 1 bringup 等待 | ~10 秒 |
+| 地图 PCD 加载 + 发送 | ~2 秒 |
+| FPFH 特征计算（地图） | ~30-90 秒（取决于 CPU） |
+| RANSAC 匹配 + 发布结果 | ~5-15 秒 |
+| **总计** | **约 1-2 分钟** |
+
+### 3.8 停止
+
+`Ctrl+C` 即可，脚本会自动 kill 所有相关进程（包括 rtabmap、fastlio、livox 等子进程）。
