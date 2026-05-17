@@ -69,7 +69,6 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = LaunchConfiguration('autostart')
     start_livox = LaunchConfiguration('start_livox')
-    start_fastlio = LaunchConfiguration('start_fastlio')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
@@ -88,7 +87,6 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('autostart', default_value='true'),
         DeclareLaunchArgument('start_livox', default_value='true', description='Start Livox MID360 launch'),
-        DeclareLaunchArgument('start_fastlio', default_value='true', description='Start FAST-LIO odometry'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
@@ -140,7 +138,6 @@ def generate_launch_description() -> LaunchDescription:
             'config_file': 'mid360.yaml',
             'rviz': 'false',
         }.items(),
-        condition=IfCondition(start_fastlio),
     )
 
     # ── 4. BT-468 RTK driver (started when enable_gps=true) ──

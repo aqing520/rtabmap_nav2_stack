@@ -53,19 +53,17 @@ echo "  mode      : $BRINGUP_MODE"
 echo "=============================================="
 
 BRINGUP_PGID=""
-HDL_PID=""
 
 cleanup() {
     echo ""
     echo "[INFO] Shutting down ..."
-    # kill 整个进程组（包含 ros2 launch 的所有子进程）
+    # kill 整个进程组（hdl_node / rtabmap / fastlio / livox 全包含）
     [[ -n "$BRINGUP_PGID" ]] && kill -- -"$BRINGUP_PGID" 2>/dev/null
-    [[ -n "$HDL_PID"      ]] && kill "$HDL_PID" 2>/dev/null
     sleep 2
     # 兜底：强制清理可能残留的节点
-    pkill -9 -f "fastlio_mapping"        2>/dev/null || true
-    pkill -9 -f "livox_ros_driver2_node" 2>/dev/null || true
-    pkill -9 -f "rtabmap$"               2>/dev/null || true
+    pkill -9 -f "fastlio_mapping"              2>/dev/null || true
+    pkill -9 -f "livox_ros_driver2_node"       2>/dev/null || true
+    pkill -9 -f "rtabmap$"                     2>/dev/null || true
     pkill -9 -f "hdl_global_localization_node" 2>/dev/null || true
     echo "[INFO] All processes stopped. Logs: $LOG_DIR"
 }
@@ -75,22 +73,17 @@ trap cleanup EXIT INT TERM
 # Phase 1: 完整 bringup，Nav2 先不自动激活（autostart=false）
 # ─────────────────────────────────────────────────────────────
 echo ""
-echo "【Phase 1】Bringup (Nav2 autostart=false)"
-# setsid 让 bringup 和其所有子进程在独立进程组里，cleanup 时可以整组 kill
-setsid ros2 launch robot_bringup bringup.launch.py \
+echo "【Phase 1】Bringup + HDL node (Nav2 autostart=false)"
+# setsid 让整个 launch 组（含 hdl_node、rtabmap、fastlio、livox）
+# 在独立进程组里运行，cleanup 时 kill -- -PGID 一次性全部清理
+setsid ros2 launch robot_bringup global_localization_bringup.launch.py \
     mode:="$BRINGUP_MODE" \
     database_path:="$DATABASE_PATH" \
     enable_rviz:="$ENABLE_RVIZ" \
-    autostart:=false \
     > "$LOG_DIR/bringup.log" 2>&1 &
 BRINGUP_PID=$!
 BRINGUP_PGID=$BRINGUP_PID   # setsid 后 PGID == PID
 echo "  PID=$BRINGUP_PID  PGID=$BRINGUP_PGID  log=$LOG_DIR/bringup.log"
-
-echo "  Starting hdl_global_localization_node ..."
-ros2 run hdl_global_localization hdl_global_localization_node \
-    > "$LOG_DIR/hdl_node.log" 2>&1 &
-HDL_PID=$!
 
 echo "  Waiting ${BRINGUP_WAIT_SEC}s for FAST-LIO ..."
 sleep "$BRINGUP_WAIT_SEC"
