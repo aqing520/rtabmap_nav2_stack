@@ -12,6 +12,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -25,7 +26,28 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_gps', default_value='false'),
         DeclareLaunchArgument('localization', default_value='true', description='false=mapping, true=localization/navigation'),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
-        DeclareLaunchArgument('rtabmap_args', default_value=''),
+        DeclareLaunchArgument(
+            'rtabmap_args',
+            default_value=(
+                '--Grid/RayTracing true'
+                ' --Grid/CellSize 0.05'
+                ' --Grid/FromDepth false'
+                ' --Grid/PreVoxelFiltering true'
+                ' --Grid/RangeMax 20.0'
+                ' --Grid/RangeMin 0.1'
+                ' --Grid/MaxGroundHeight 0.08'
+                ' --Grid/MinGroundHeight -0.6'
+                ' --Grid/MaxObstacleHeight 1.6'
+                ' --Grid/NormalK 20'
+                ' --Grid/MaxGroundAngle 22'
+                ' --Grid/ClusterRadius 0.18'
+                ' --Grid/FootprintRadius 0.3'
+                ' --Grid/MinClusterSize 5'
+                ' --Grid/NoiseFilteringRadius 0.12'
+                ' --Grid/NoiseFilteringMinNeighbors 2'
+                ' --Grid/Scan2dUnknownSpaceFilled true'
+            ),
+        ),
         DeclareLaunchArgument('frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('map_frame_id', default_value='map'),
         DeclareLaunchArgument('odom_topic', default_value='/Odometry'),
@@ -89,8 +111,22 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
+    fixed_map = Node(
+        package='robot_bringup',
+        executable='fill_unknown_map_node.py',
+        name='fill_unknown_map',
+        output='screen',
+        parameters=[{
+            'input_topic': '/map',
+            'output_topic': '/map_fixed',
+            'max_fill_area_m2': 4.0,
+            'obstacle_keepout_m': 0.7,
+        }],
+    )
+
     ld = LaunchDescription()
     for action in declare_args:
         ld.add_action(action)
     ld.add_action(rtabmap_launch)
+    ld.add_action(fixed_map)
     return ld

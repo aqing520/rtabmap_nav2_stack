@@ -42,22 +42,24 @@ DEFAULT_RTABMAP_ARGS = (
     "--Icp/PointToPlaneK 15 "
     "--Icp/PointToPlaneMinComplexity 0.04 "
     "--Grid/CellSize 0.05 "
+    "--Grid/FromDepth false "
     "--Grid/PreVoxelFiltering true "
     "--Grid/3D false "
     "--Grid/NormalsSegmentation true "
     "--Grid/NormalK 20 "
-    "--Grid/MaxGroundAngle 45 "
-    "--Grid/ClusterRadius 0.12 "
+    "--Grid/MaxGroundAngle 22 "
+    "--Grid/ClusterRadius 0.18 "
     "--Grid/RangeMin 0.1 "
     "--Grid/RangeMax 20.0 "
     "--Grid/FootprintLength 0.55 "
     "--Grid/FootprintWidth 0.45 "
-    "--Grid/MinClusterSize 20 "
-    "--Grid/NoiseFilteringRadius 0.18 "
-    "--Grid/NoiseFilteringMinNeighbors 5 "
-    "--Grid/MaxObstacleHeight 1.8 "
+    "--Grid/MinClusterSize 5 "
+    "--Grid/NoiseFilteringRadius 0.12 "
+    "--Grid/NoiseFilteringMinNeighbors 2 "
+    "--Grid/MaxObstacleHeight 1.6 "
     "--Grid/MinGroundHeight -0.6 "
-    "--Grid/MaxGroundHeight 0.25 "
+    "--Grid/MaxGroundHeight 0.08 "
+    "--Grid/Scan2dUnknownSpaceFilled true "
     "--Grid/RayTracing true"
 )
 
@@ -72,6 +74,7 @@ def generate_launch_description() -> LaunchDescription:
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
+    delete_db_on_mapping_start = LaunchConfiguration('delete_db_on_mapping_start')
     database_path = LaunchConfiguration('database_path')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
 
@@ -90,6 +93,11 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
+        DeclareLaunchArgument(
+            'delete_db_on_mapping_start',
+            default_value='true',
+            description='Delete the RTAB-Map database automatically when mode:=mapping. Ignored for localization/navigation.',
+        ),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
@@ -204,6 +212,10 @@ def generate_launch_description() -> LaunchDescription:
             'imu_topic': LaunchConfiguration('imu_topic'),
             'gps_topic': LaunchConfiguration('gps_fix_topic'),
             'scan_cloud_topic': LaunchConfiguration('scan_cloud_topic'),
+            'delete_db_on_start': PythonExpression([
+                "'true' if '", mode, "' == 'mapping' and '",
+                delete_db_on_mapping_start, "' == 'true' else 'false'"
+            ]),
             'rviz': 'false',
         }.items(),
     )

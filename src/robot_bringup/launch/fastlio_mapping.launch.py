@@ -140,9 +140,22 @@ def generate_launch_description() -> LaunchDescription:
             'namespace': 'rtabmap',
             'args': PythonExpression([
                 "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
-                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/3D false --Grid/NormalsSegmentation true --Grid/RangeMin 0.5 --Grid/RangeMax 5.0 --Grid/FootprintLength 0.55 --Grid/FootprintWidth 0.45 --Grid/MinClusterSize 20 --Grid/NoiseFilteringRadius 0.18 --Grid/NoiseFilteringMinNeighbors 5 --Grid/MaxObstacleHeight 1.2 --Grid/MinGroundHeight -0.3 --Grid/MaxGroundHeight 0.15 --Grid/RayTracing true'"
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/CellSize 0.05 --Grid/FromDepth false --Grid/PreVoxelFiltering true --Grid/3D false --Grid/NormalsSegmentation true --Grid/NormalK 20 --Grid/MaxGroundAngle 22 --Grid/ClusterRadius 0.18 --Grid/RangeMin 0.1 --Grid/RangeMax 20.0 --Grid/FootprintLength 0.55 --Grid/FootprintWidth 0.45 --Grid/MinClusterSize 5 --Grid/NoiseFilteringRadius 0.12 --Grid/NoiseFilteringMinNeighbors 2 --Grid/MaxObstacleHeight 1.6 --Grid/MinGroundHeight -0.6 --Grid/MaxGroundHeight 0.08 --Grid/Scan2dUnknownSpaceFilled true --Grid/RayTracing true'"
             ]),
         }.items(),
+    )
+
+    fixed_map = Node(
+        package='robot_bringup',
+        executable='fill_unknown_map_node.py',
+        name='fill_unknown_map',
+        output='screen',
+        parameters=[{
+            'input_topic': '/map',
+            'output_topic': '/map_fixed',
+            'max_fill_area_m2': 4.0,
+            'obstacle_keepout_m': 0.7,
+        }],
     )
 
     # ── Assemble ──
@@ -167,5 +180,6 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(livox_launch)
     ld.add_action(fast_lio_launch)
     ld.add_action(rtabmap_launch)
+    ld.add_action(fixed_map)
     
     return ld

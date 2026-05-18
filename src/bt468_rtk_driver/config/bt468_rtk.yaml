@@ -1,0 +1,8 @@
+bt468_rtk_node:
+  ros__parameters:
+    port: "auto"
+    baud: 38400
+    timeout_sec: 0.2
+    reconnect_delay_sec: 1.0
+    frame_id: "gnss_link"
+    log_summary: true
