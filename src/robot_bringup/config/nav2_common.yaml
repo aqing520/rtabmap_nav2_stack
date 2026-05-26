@@ -151,7 +151,7 @@ local_costmap:
         origin_z: -0.5
         z_resolution: 0.15
         z_voxels: 16
-        max_obstacle_height: 1.80
+        max_obstacle_height: 1.00
         mark_threshold: 0
         observation_sources: lidar_cloud
         lidar_cloud:
@@ -160,7 +160,7 @@ local_costmap:
           clearing: true
           marking: true
           min_obstacle_height: 0.01
-          max_obstacle_height: 1.60
+          max_obstacle_height: 1.00
           raytrace_min_range: 0.0
           raytrace_max_range: 3.5
           obstacle_min_range: 0.0
@@ -199,7 +199,7 @@ global_costmap:
         origin_z: -0.5
         z_resolution: 0.15
         z_voxels: 16
-        max_obstacle_height: 1.80
+        max_obstacle_height: 1.00
         mark_threshold: 0
         observation_sources: lidar_cloud
         lidar_cloud:
@@ -208,7 +208,7 @@ global_costmap:
           clearing: true
           marking: true
           min_obstacle_height: 0.01
-          max_obstacle_height: 1.60
+          max_obstacle_height: 1.00
           raytrace_min_range: 0.0
           raytrace_max_range: 5.0
           obstacle_min_range: 0.0

@@ -37,7 +37,7 @@ def generate_launch_description() -> LaunchDescription:
                 ' --Grid/RangeMin 0.1'
                 ' --Grid/MaxGroundHeight 0.08'
                 ' --Grid/MinGroundHeight -0.6'
-                ' --Grid/MaxObstacleHeight 1.6'
+                ' --Grid/MaxObstacleHeight 1.0'
                 ' --Grid/NormalK 20'
                 ' --Grid/MaxGroundAngle 22'
                 ' --Grid/ClusterRadius 0.18'

@@ -56,7 +56,7 @@ DEFAULT_RTABMAP_ARGS = (
     "--Grid/MinClusterSize 5 "
     "--Grid/NoiseFilteringRadius 0.12 "
     "--Grid/NoiseFilteringMinNeighbors 2 "
-    "--Grid/MaxObstacleHeight 1.6 "
+    "--Grid/MaxObstacleHeight 1.0 "
     "--Grid/MinGroundHeight -0.6 "
     "--Grid/MaxGroundHeight 0.08 "
     "--Grid/Scan2dUnknownSpaceFilled true "
@@ -289,7 +289,7 @@ def generate_launch_description() -> LaunchDescription:
             'pointcloud.type': 'pointcloud',
             'pointcloud.topic': '/cloud_registered_body',
             'pointcloud.min_height': 0.12,
-            'pointcloud.max_height': 1.20,
+            'pointcloud.max_height': 1.00,
             'pointcloud.enabled': True,
         }],
     )
