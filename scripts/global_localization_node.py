@@ -78,30 +78,40 @@ def _adaptive_voxel_size(pcd, target: int, tolerance: float = 0.2,
 
 
 def load_pcd_as_cloud2(pcd_path: str, voxel_size: float = None,
-                       target_points: int = 150_000) -> PointCloud2:
-    """Load PCD, pre-downsample with open3d, return xyz-only PointCloud2.
+                       target_points: int = 150_000,
+                       z_min: float = 0.1, z_max: float = 2.2) -> PointCloud2:
+    """Load PCD, height-filter, pre-downsample with open3d, return xyz-only PointCloud2.
 
     Pre-downsampling avoids sending millions of raw points over the ROS2
     service — the hdl node would downsample them anyway.
     If voxel_size is None, adaptively searches for a voxel size that yields
     ~target_points (default 150 000, tolerance ±20 %).
+    z_min/z_max clip floor reflections and ceiling to keep only structurally
+    distinctive points (columns, walls, furniture).
     """
     import open3d as o3d
 
     pcd = o3d.io.read_point_cloud(pcd_path)
     n_raw = len(pcd.points)
 
+    # height filter: remove floor and ceiling
+    pts = np.asarray(pcd.points)
+    mask = (pts[:, 2] >= z_min) & (pts[:, 2] <= z_max)
+    pcd = pcd.select_by_index(np.where(mask)[0])
+    n_filtered = len(pcd.points)
+    print(f"[map] height filter z=[{z_min}, {z_max}]: {n_raw} → {n_filtered} pts")
+
     if voxel_size is not None:
         pcd_down = pcd.voxel_down_sample(voxel_size)
         n_down = len(pcd_down.points)
-        print(f"[map] {n_raw} pts → {n_down} pts (voxel={voxel_size:.3f}m, fixed)")
-    elif n_raw <= target_points:
+        print(f"[map] {n_filtered} pts → {n_down} pts (voxel={voxel_size:.3f}m, fixed)")
+    elif n_filtered <= target_points:
         pcd_down = pcd
-        n_down = n_raw
-        print(f"[map] {n_raw} pts (already ≤ target={target_points}, no downsampling)")
+        n_down = n_filtered
+        print(f"[map] {n_filtered} pts (already ≤ target={target_points}, no downsampling)")
     else:
         pcd_down, voxel_size, n_down = _adaptive_voxel_size(pcd, target_points)
-        print(f"[map] {n_raw} pts → {n_down} pts (voxel={voxel_size:.3f}m, adaptive target={target_points})")
+        print(f"[map] {n_filtered} pts → {n_down} pts (voxel={voxel_size:.3f}m, adaptive target={target_points})")
 
     xyz = np.asarray(pcd_down.points, dtype=np.float32)
 
