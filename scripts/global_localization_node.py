@@ -57,6 +57,10 @@ def _adaptive_voxel_size(pcd, target: int, tolerance: float = 0.2,
                          voxel_min: float = 0.05, voxel_max: float = 5.0,
                          max_iter: int = 20) -> tuple:
     """Binary-search for voxel size that yields target ± tolerance*target points."""
+    # 若最小体素已无法达到目标点数，说明点云太稀疏，直接返回原始点云
+    if len(pcd.voxel_down_sample(voxel_min).points) < target * (1 - tolerance):
+        return pcd, voxel_min, len(pcd.points)
+
     lo, hi = voxel_min, voxel_max
     best_pcd, best_voxel = pcd, lo
     for _ in range(max_iter):
