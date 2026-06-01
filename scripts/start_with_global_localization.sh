@@ -24,6 +24,7 @@ DATABASE_PATH="${DATABASE_PATH:-/data/maps/site_a/rtabmap.db}"
 ENGINE="${ENGINE:-FPFH_RANSAC}"
 BRINGUP_MODE="${BRINGUP_MODE:-navigation}"
 ENABLE_RVIZ="${ENABLE_RVIZ:-false}"
+PCD_PATH=""
 
 BRINGUP_WAIT_SEC=10   # 等 FAST-LIO 发布第一帧扫描
 
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
         --engine) ENGINE="$2";        shift 2 ;;
         --mode)   BRINGUP_MODE="$2";  shift 2 ;;
         --rviz)   ENABLE_RVIZ="true"; shift   ;;
+        --pcd)    PCD_PATH="$2";      shift 2 ;;
         *) echo "[WARN] Unknown arg: $1"; shift  ;;
     esac
 done
@@ -93,7 +95,7 @@ sleep "$BRINGUP_WAIT_SEC"
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "【Phase 2】Global localization (engine=$ENGINE)"
-python3 "$SCRIPT_DIR/global_localization_node.py" --engine "$ENGINE"
+python3 "$SCRIPT_DIR/global_localization_node.py" ${PCD_PATH:+"$PCD_PATH"} --engine "$ENGINE"
 echo "  /initialpose published"
 
 # ─────────────────────────────────────────────────────────────
