@@ -175,33 +175,6 @@ def write_pcd_binary(filename, points, fields=None):
     print(f"[OK] Wrote {n} points to {filename}")
 
 
-def write_ply_ascii(filename, points):
-    """Write Nx3+ points to PLY ascii format."""
-    n = points.shape[0]
-    dim = points.shape[1]
-    has_intensity = dim >= 4
-    has_normals = dim >= 7
-
-    with open(filename, 'w') as f:
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {n}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        if has_intensity:
-            f.write("property float intensity\n")
-        if has_normals:
-            f.write("property float nx\n")
-            f.write("property float ny\n")
-            f.write("property float nz\n")
-        f.write("end_header\n")
-        for i in range(n):
-            vals = ' '.join(f'{v:.6f}' for v in points[i, :min(dim, 7)])
-            f.write(vals + '\n')
-    print(f"[OK] Wrote {n} points to {filename}")
-
-
 def main():
     db_path = sys.argv[1] if len(sys.argv) > 1 else "/data/maps/site_a/rtabmap.db"
     output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cloud_map")
@@ -287,22 +260,13 @@ def main():
     print(f"[INFO] Total assembled points: {cloud.shape[0]}")
     print(f"[INFO] Channels: {cloud.shape[1]}")
 
-    # Write PCD (xyz + intensity)
     from datetime import datetime
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    basename = f"rtabmap_{ts}"
-
-    # Full cloud as PCD (binary, xyz only or xyzi)
-    pcd_path = os.path.join(output_dir, f"{basename}_cloud.pcd")
+    pcd_path = os.path.join(output_dir, f"rtabmap_{ts}_cloud.pcd")
     write_pcd_binary(pcd_path, cloud[:, :min(cloud.shape[1], 4)])
-
-    # Also write PLY for compatibility
-    ply_path = os.path.join(output_dir, f"{basename}_cloud.ply")
-    write_ply_ascii(ply_path, cloud[:, :min(cloud.shape[1], 7)])
 
     print(f"\n[DONE] Exported:")
     print(f"  PCD: {pcd_path}")
-    print(f"  PLY: {ply_path}")
 
 
 if __name__ == "__main__":
