@@ -56,7 +56,7 @@ DEFAULT_RTABMAP_ARGS = (
     "--Grid/MinClusterSize 5 "
     "--Grid/NoiseFilteringRadius 0.12 "
     "--Grid/NoiseFilteringMinNeighbors 2 "
-    "--Grid/MaxObstacleHeight 1.0 "
+    "--Grid/MaxObstacleHeight 1.6 "
     "--Grid/MinGroundHeight -0.6 "
     "--Grid/MaxGroundHeight 0.08 "
     "--Grid/Scan2dUnknownSpaceFilled true "
@@ -71,12 +71,16 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = LaunchConfiguration('autostart')
     start_livox = LaunchConfiguration('start_livox')
+    start_camera = LaunchConfiguration('start_camera')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     delete_db_on_mapping_start = LaunchConfiguration('delete_db_on_mapping_start')
     database_path = LaunchConfiguration('database_path')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
+    start_multi_waypoint_routes = LaunchConfiguration('start_multi_waypoint_routes')
+    waypoint_map_id = LaunchConfiguration('waypoint_map_id')
+    waypoint_map_frame_id = LaunchConfiguration('waypoint_map_frame_id')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
     nav2_bringup_share = FindPackageShare('nav2_bringup')
@@ -90,6 +94,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('autostart', default_value='true'),
         DeclareLaunchArgument('start_livox', default_value='true', description='Start Livox MID360 launch'),
+        DeclareLaunchArgument('start_camera', default_value='false', description='Start Orbbec Gemini/Astra RGB-D camera'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
@@ -101,6 +106,9 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
+        DeclareLaunchArgument('start_multi_waypoint_routes', default_value='false', description='Start RViz clicked-point waypoint manager'),
+        DeclareLaunchArgument('waypoint_map_id', default_value='site_a', description='Map name/id attached to RViz waypoint collection'),
+        DeclareLaunchArgument('waypoint_map_frame_id', default_value='map', description='Required frame_id for RViz clicked points'),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
         DeclareLaunchArgument('rtabmap_odom_topic', default_value='/Odometry'),
@@ -111,6 +119,18 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument('gps_fix_topic', default_value='/sensors/gps/fix'),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
+        DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw'),
+        DeclareLaunchArgument('depth_topic', default_value='/camera/depth/image_raw'),
+        DeclareLaunchArgument('camera_info_topic', default_value='/camera/color/camera_info'),
+        DeclareLaunchArgument('camera_name', default_value='camera'),
+        DeclareLaunchArgument('camera_base_frame', default_value='base_link'),
+        DeclareLaunchArgument('camera_link_frame', default_value='camera_link'),
+        DeclareLaunchArgument('camera_x', default_value='0.10'),
+        DeclareLaunchArgument('camera_y', default_value='0.0'),
+        DeclareLaunchArgument('camera_z', default_value='0.616'),
+        DeclareLaunchArgument('camera_roll', default_value='-1.5707'),
+        DeclareLaunchArgument('camera_pitch', default_value='0.0'),
+        DeclareLaunchArgument('camera_yaw', default_value='-1.5707'),
         DeclareLaunchArgument('rtk_port', default_value='auto', description='BT-468 serial port, e.g. /dev/ttyUSB0 or "auto"'),
         DeclareLaunchArgument('rtk_baud', default_value='38400', description='BT-468 baud rate'),
     ]
@@ -145,6 +165,24 @@ def generate_launch_description() -> LaunchDescription:
             'use_sim_time': use_sim_time,
             'config_file': 'mid360.yaml',
             'rviz': 'false',
+        }.items(),
+    )
+
+    # ── 3b. Orbbec Gemini/Astra RGB-D camera ──
+    camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([robot_bringup_share, 'launch', 'orbbec_camera.launch.py'])),
+        condition=IfCondition(start_camera),
+        launch_arguments={
+            'start_camera': start_camera,
+            'camera_name': LaunchConfiguration('camera_name'),
+            'camera_base_frame': LaunchConfiguration('camera_base_frame'),
+            'camera_link_frame': LaunchConfiguration('camera_link_frame'),
+            'camera_x': LaunchConfiguration('camera_x'),
+            'camera_y': LaunchConfiguration('camera_y'),
+            'camera_z': LaunchConfiguration('camera_z'),
+            'camera_roll': LaunchConfiguration('camera_roll'),
+            'camera_pitch': LaunchConfiguration('camera_pitch'),
+            'camera_yaw': LaunchConfiguration('camera_yaw'),
         }.items(),
     )
 
@@ -212,6 +250,9 @@ def generate_launch_description() -> LaunchDescription:
             'imu_topic': LaunchConfiguration('imu_topic'),
             'gps_topic': LaunchConfiguration('gps_fix_topic'),
             'scan_cloud_topic': LaunchConfiguration('scan_cloud_topic'),
+            'rgb_topic': LaunchConfiguration('rgb_topic'),
+            'depth_topic': LaunchConfiguration('depth_topic'),
+            'camera_info_topic': LaunchConfiguration('camera_info_topic'),
             'delete_db_on_start': PythonExpression([
                 "'true' if '", mode, "' == 'mapping' and '",
                 delete_db_on_mapping_start, "' == 'true' else 'false'"
@@ -307,6 +348,21 @@ def generate_launch_description() -> LaunchDescription:
         }],
     )
 
+    multi_waypoint_route_node = Node(
+        package='robot_bringup',
+        executable='multi_waypoint_route_node.py',
+        name='multi_waypoint_route',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '", start_multi_waypoint_routes, "' == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'map_id': waypoint_map_id,
+            'map_frame_id': waypoint_map_frame_id,
+        }],
+    )
+
     # ── Assemble ──
     ld = LaunchDescription()
     ld.add_action(SetEnvironmentVariable('RCUTILS_LOGGING_BUFFERED_STREAM', '1'))
@@ -327,6 +383,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(livox_tf)
     ld.add_action(livox_launch)
     ld.add_action(fast_lio_launch)
+    ld.add_action(camera_launch)
     ld.add_action(btk_rtk_node)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
@@ -334,4 +391,5 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(nav2_launch)
     ld.add_action(collision_monitor)
     ld.add_action(collision_monitor_lifecycle)
+    ld.add_action(multi_waypoint_route_node)
     return ld

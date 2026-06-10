@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROS_DISTRO_NAME="${ROS_DISTRO_NAME:-humble}"
 JOBS="${JOBS:-8}"
 WORKERS="${WORKERS:-4}"
@@ -139,7 +139,7 @@ HEAVY_PACKAGES=(
 
 REST_PACKAGES=(
   rtabmap_util rtabmap_odom rtabmap_slam rtabmap_launch rtabmap_examples rtabmap_demos rtabmap_ros
-  rtsp_camera_bridge bt468_rtk_driver robot_bringup
+  rtsp_camera_bridge bt468_rtk_driver scan_context_relocalization robot_bringup
 )
 
 CMAKE_ARGS=(

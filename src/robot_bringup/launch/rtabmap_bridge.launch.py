@@ -37,7 +37,7 @@ def generate_launch_description() -> LaunchDescription:
                 ' --Grid/RangeMin 0.1'
                 ' --Grid/MaxGroundHeight 0.08'
                 ' --Grid/MinGroundHeight -0.6'
-                ' --Grid/MaxObstacleHeight 1.0'
+                ' --Grid/MaxObstacleHeight 1.6'
                 ' --Grid/NormalK 20'
                 ' --Grid/MaxGroundAngle 22'
                 ' --Grid/ClusterRadius 0.18'
@@ -54,9 +54,9 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('imu_topic', default_value='/unused_imu'),
         DeclareLaunchArgument('gps_topic', default_value='/sensors/gps/fix'),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
-        DeclareLaunchArgument('rgb_topic', default_value='/sensors/camera/rgb/image_rect'),
-        DeclareLaunchArgument('depth_topic', default_value='/sensors/camera/depth/image_rect'),
-        DeclareLaunchArgument('camera_info_topic', default_value='/sensors/camera/rgb/camera_info'),
+        DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw'),
+        DeclareLaunchArgument('depth_topic', default_value='/camera/depth/image_raw'),
+        DeclareLaunchArgument('camera_info_topic', default_value='/camera/color/camera_info'),
         DeclareLaunchArgument('left_image_topic', default_value='/sensors/camera/left/image_rect'),
         DeclareLaunchArgument('right_image_topic', default_value='/sensors/camera/right/image_rect'),
         DeclareLaunchArgument('left_camera_info_topic', default_value='/sensors/camera/left/camera_info'),

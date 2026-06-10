@@ -30,6 +30,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     start_livox = LaunchConfiguration('start_livox')
+    start_camera = LaunchConfiguration('start_camera')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     rviz = LaunchConfiguration('rviz')
     rtabmap_viz = LaunchConfiguration('rtabmap_viz')
@@ -37,6 +38,7 @@ def generate_launch_description() -> LaunchDescription:
     fast_lio_config_file = LaunchConfiguration('fast_lio_config_file')
 
     livox_share = FindPackageShare('livox_ros_driver2')
+    robot_bringup_share = FindPackageShare('robot_bringup')
     rtabmap_launch_share = FindPackageShare('rtabmap_launch')
     fast_lio_share = FindPackageShare('fast_lio')
 
@@ -45,6 +47,8 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('start_livox', default_value='true',
                               description='Start Livox MID360 driver'),
+        DeclareLaunchArgument('start_camera', default_value='false',
+                              description='Start Orbbec Gemini/Astra RGB-D camera'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true',
                               description='Publish static TF base_footprint -> base_link'),
         DeclareLaunchArgument('rviz', default_value='false'),
@@ -57,6 +61,20 @@ def generate_launch_description() -> LaunchDescription:
         # RTAB-Map's loop closure and map generation will be much cleaner/sharper.
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body',
                               description='Input point cloud topic for RTAB-Map'),
+        DeclareLaunchArgument('sensor_profile', default_value='lidar_only',
+                              description='lidar_only | lidar_rgbd'),
+        DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw'),
+        DeclareLaunchArgument('depth_topic', default_value='/camera/depth/image_raw'),
+        DeclareLaunchArgument('camera_info_topic', default_value='/camera/color/camera_info'),
+        DeclareLaunchArgument('camera_name', default_value='camera'),
+        DeclareLaunchArgument('camera_base_frame', default_value='base_link'),
+        DeclareLaunchArgument('camera_link_frame', default_value='camera_link'),
+        DeclareLaunchArgument('camera_x', default_value='0.10'),
+        DeclareLaunchArgument('camera_y', default_value='0.0'),
+        DeclareLaunchArgument('camera_z', default_value='0.616'),
+        DeclareLaunchArgument('camera_roll', default_value='-1.5707'),
+        DeclareLaunchArgument('camera_pitch', default_value='0.0'),
+        DeclareLaunchArgument('camera_yaw', default_value='-1.5707'),
         DeclareLaunchArgument(
             'imu_topic',
             default_value='/unused_imu',
@@ -109,6 +127,24 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
+    # ── 3b. Orbbec Gemini/Astra RGB-D camera ──
+    camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([robot_bringup_share, 'launch', 'orbbec_camera.launch.py'])),
+        condition=IfCondition(start_camera),
+        launch_arguments={
+            'start_camera': start_camera,
+            'camera_name': LaunchConfiguration('camera_name'),
+            'camera_base_frame': LaunchConfiguration('camera_base_frame'),
+            'camera_link_frame': LaunchConfiguration('camera_link_frame'),
+            'camera_x': LaunchConfiguration('camera_x'),
+            'camera_y': LaunchConfiguration('camera_y'),
+            'camera_z': LaunchConfiguration('camera_z'),
+            'camera_roll': LaunchConfiguration('camera_roll'),
+            'camera_pitch': LaunchConfiguration('camera_pitch'),
+            'camera_yaw': LaunchConfiguration('camera_yaw'),
+        }.items(),
+    )
+
     # ── 4. RTAB-Map SLAM ──
     rtabmap_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -130,17 +166,20 @@ def generate_launch_description() -> LaunchDescription:
             'icp_odometry': 'false',
             'rviz': rviz,
             'rtabmap_viz': rtabmap_viz,
-            'rgbd_sync': 'false',
-            'subscribe_rgbd': 'false',
-            'subscribe_rgb': 'false',
-            'depth': 'false',
+            'rgb_topic': LaunchConfiguration('rgb_topic'),
+            'depth_topic': LaunchConfiguration('depth_topic'),
+            'camera_info_topic': LaunchConfiguration('camera_info_topic'),
+            'rgbd_sync': PythonExpression(["'", LaunchConfiguration('sensor_profile'), "' == 'lidar_rgbd'"]),
+            'subscribe_rgbd': PythonExpression(["'", LaunchConfiguration('sensor_profile'), "' == 'lidar_rgbd'"]),
+            'subscribe_rgb': PythonExpression(["'", LaunchConfiguration('sensor_profile'), "' == 'lidar_rgbd'"]),
+            'depth': PythonExpression(["'", LaunchConfiguration('sensor_profile'), "' == 'lidar_rgbd'"]),
             'stereo': 'false',
             'approx_sync': 'true',
             'qos': '2',
             'namespace': 'rtabmap',
             'args': PythonExpression([
                 "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
-                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/CellSize 0.05 --Grid/FromDepth false --Grid/PreVoxelFiltering true --Grid/3D false --Grid/NormalsSegmentation true --Grid/NormalK 20 --Grid/MaxGroundAngle 22 --Grid/ClusterRadius 0.18 --Grid/RangeMin 0.1 --Grid/RangeMax 20.0 --Grid/FootprintLength 0.55 --Grid/FootprintWidth 0.45 --Grid/MinClusterSize 5 --Grid/NoiseFilteringRadius 0.12 --Grid/NoiseFilteringMinNeighbors 2 --Grid/MaxObstacleHeight 1.0 --Grid/MinGroundHeight -0.6 --Grid/MaxGroundHeight 0.08 --Grid/Scan2dUnknownSpaceFilled true --Grid/RayTracing true'"
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.05 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.5 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04 --Grid/CellSize 0.05 --Grid/FromDepth false --Grid/PreVoxelFiltering true --Grid/3D false --Grid/NormalsSegmentation true --Grid/NormalK 20 --Grid/MaxGroundAngle 22 --Grid/ClusterRadius 0.18 --Grid/RangeMin 0.1 --Grid/RangeMax 20.0 --Grid/FootprintLength 0.55 --Grid/FootprintWidth 0.45 --Grid/MinClusterSize 5 --Grid/NoiseFilteringRadius 0.12 --Grid/NoiseFilteringMinNeighbors 2 --Grid/MaxObstacleHeight 1.6 --Grid/MinGroundHeight -0.6 --Grid/MaxGroundHeight 0.08 --Grid/Scan2dUnknownSpaceFilled true --Grid/RayTracing true'"
             ]),
         }.items(),
     )
@@ -179,6 +218,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(livox_tf)
     ld.add_action(livox_launch)
     ld.add_action(fast_lio_launch)
+    ld.add_action(camera_launch)
     ld.add_action(rtabmap_launch)
     ld.add_action(fixed_map)
     

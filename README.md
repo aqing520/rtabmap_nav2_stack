@@ -6,9 +6,43 @@
 - `FAST-LIO` 负责雷达惯性里程计（发布 `odom -> base_footprint`）
 - `RTAB-Map` 负责全局建图/回环/重定位（发布 `map -> odom`）
 - `Nav2` 负责规划、控制与避障执行
-## 0.编译
+## 0. 编译与运行环境
+
+### 0.1 运行环境
+
+本项目按以下环境整理和验证：
+
+| 项目 | 版本 / 说明 |
+|---|---|
+| OS | Ubuntu 22.04 |
+| ROS | ROS 2 Humble |
+| 机器人平台 | Wheeltec 底盘，Livox MID360 激光雷达 |
+| 核心链路 | Livox 驱动 + FAST-LIO + RTAB-Map + Nav2 |
+| 导航输入 | RTAB-Map 发布 `/map` 和 `map -> odom`，FAST-LIO 发布 `/Odometry` 和 `odom -> base_footprint` |
+| 导航输出 | Nav2 输出 `/cmd_vel_nav`，再经过 `nav2_collision_monitor` 转发到 `/cmd_vel` |
+
+> 运行前请确认已经 source ROS 2 环境：`source /opt/ros/humble/setup.bash`。
+
+### 0.2 编译
+
 ```bash
-do_build_all.sh  #直接编译就行
+cd ~/xz/rtabmap_nav2_stack
+source /opt/ros/humble/setup.bash
+bash scripts/do_build_all.sh
+```
+
+`scripts/do_build_all.sh` 会先准备 RTAB-Map 0.23.4 的本地库环境，再执行工作空间 `colcon build`。编译完成后，新终端运行前需要执行：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+source install/setup.bash
+```
+
+如果修改了 C++ 包、消息/服务接口或 Nav2 插件相关配置，建议清理后重编：
+
+```bash
+rm -rf build install log
+bash scripts/do_build_all.sh
 ```
 
 ## 1. 仓库结构
@@ -223,3 +257,55 @@ bash scripts/start_with_global_localization.sh --rviz
 ### 3.8 停止
 
 `Ctrl+C` 即可，脚本会自动 kill 所有相关进程（包括 rtabmap、fastlio、livox 等子进程）。
+
+## 4. 多路路径点执行
+
+该功能用于在 RViz 中手动取路径点，不使用固定路径库。RViz 使用 `Publish Point` 工具点选多个点，节点订阅 `/clicked_point` 收集路径点，再通过 Nav2 `/follow_waypoints` 执行。
+
+单独启动路径点管理节点，并指定地图：
+
+```bash
+ros2 launch robot_bringup multi_waypoint_routes.launch.py map_id:=site_a map_frame_id:=map
+```
+
+随导航一起启动，并指定地图：
+
+```bash
+ros2 launch robot_bringup bringup.launch.py \
+  mode:=navigation \
+  database_path:=/data/maps/site_a/rtabmap.db \
+  start_multi_waypoint_routes:=true \
+  waypoint_map_id:=site_a \
+  waypoint_map_frame_id:=map
+```
+
+RViz 操作：
+
+1. Fixed Frame 设为 `map`
+2. 选择工具栏 `Publish Point`
+3. 按顺序在地图上点击多个路径点
+4. 在 RViz 中添加 `MarkerArray` 显示，话题选择 `/multi_waypoint_route/markers`
+
+执行当前手动点选的路径：
+
+```bash
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'start'}"
+```
+
+控制命令：
+
+```bash
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'undo'}"
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'clear'}"
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'pause'}"
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'resume'}"
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'skip'}"
+ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 'cancel'}"
+```
+
+状态与当前点列表：
+
+```bash
+ros2 topic echo /multi_waypoint_route/status
+ros2 topic echo /multi_waypoint_route/points
+```
