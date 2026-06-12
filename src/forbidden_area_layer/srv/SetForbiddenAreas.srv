@@ -1,0 +1,6 @@
+# 设置禁行区列表的服务
+forbidden_area_layer/ForbiddenArea[] areas
+---
+# 响应
+bool success
+string message

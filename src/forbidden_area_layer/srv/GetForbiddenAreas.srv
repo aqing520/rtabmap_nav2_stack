@@ -1,0 +1,4 @@
+# 获取禁行区列表的服务
+---
+# 响应
+forbidden_area_layer/ForbiddenArea[] areas

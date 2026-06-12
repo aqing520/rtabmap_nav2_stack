@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>forbidden_area_layer</name>
+  <version>0.0.1</version>
+  <description>Costmap layer for handling forbidden areas in navigation</description>
+  <maintainer email="user@example.com">User</maintainer>
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+
+  <depend>nav2_costmap_2d</depend>
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>pluginlib</depend>
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <plugin>
+      <description>Forbidden Area Layer</description>
+      <library_path>libforbidden_area_layer</library_path>
+      <class name="forbidden_area_layer::ForbiddenAreaLayer" base_class_type="nav2_costmap_2d::Layer"/>
+    </plugin>
+  </export>
+</package>
