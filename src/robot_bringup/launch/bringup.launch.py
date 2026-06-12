@@ -263,12 +263,16 @@ def generate_launch_description() -> LaunchDescription:
 
     # ── 5b. RViz with Nav2 navigation config ──
     nav2_rviz_config = PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_navigation.rviz'])
+    show_rviz = PythonExpression([
+        "'true' if '", enable_rviz, "' == 'true' or '",
+        start_multi_waypoint_routes, "' == 'true' else 'false'"
+    ])
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz2',
         output='screen',
-        condition=IfCondition(enable_rviz),
+        condition=IfCondition(show_rviz),
         arguments=['-d', nav2_rviz_config],
     )
 

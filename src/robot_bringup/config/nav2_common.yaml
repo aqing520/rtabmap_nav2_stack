@@ -63,7 +63,7 @@ bt_navigator_navigate_through_poses_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: false
-    controller_frequency: 20.0
+    controller_frequency: 15.0
     costmap_update_timeout: 0.30
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
@@ -87,10 +87,10 @@ controller_server:
 
     FollowPath:
       plugin: nav2_mppi_controller::MPPIController
-      time_steps: 56
-      model_dt: 0.05
-      batch_size: 2000
-      iteration_count: 4
+      time_steps: 48
+      model_dt: 0.07
+      batch_size: 1500
+      iteration_count: 2
       prune_distance: 2.5
       regenerate_noises: false
       visualize: false
@@ -99,9 +99,9 @@ controller_server:
       vx_min: 0.0
       vy_max: 0.0
       wz_max: 1.20
-      vx_std: 0.20
+      vx_std: 0.25
       vy_std: 0.0
-      wz_std: 0.25
+      wz_std: 0.45
       temperature: 0.35
       gamma: 0.02
       transform_tolerance: 0.5
@@ -121,10 +121,12 @@ controller_server:
       PathAngleCritic:
         cost_weight: 3.0
       TwirlingCritic:
-        cost_weight: 0.5
+        cost_weight: 0.1
       ObstaclesCritic:
-        repulsion_weight: 3.0
-        critical_weight: 25.0
+        repulsion_weight: 2.0
+        critical_weight: 18.0
+        inflation_radius: 0.35
+        collision_margin_distance: 0.05
         collision_cost: 100000.0
         consider_footprint: false
 
@@ -179,7 +181,7 @@ local_costmap:
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 2.0
-        inflation_radius: 0.45
+        inflation_radius: 0.35
       always_send_full_costmap: true
 
 global_costmap:
@@ -227,7 +229,7 @@ global_costmap:
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 2.0
-        inflation_radius: 0.70
+        inflation_radius: 0.45
       always_send_full_costmap: true
 
 planner_server:

@@ -265,18 +265,28 @@ bash scripts/start_with_global_localization.sh --rviz
 单独启动路径点管理节点，并指定地图：
 
 ```bash
+source /opt/ros/humble/setup.bash
+source /home/wheeltec/xz/rtabmap_nav2_stack/install/setup.bash
 ros2 launch robot_bringup multi_waypoint_routes.launch.py map_id:=site_a map_frame_id:=map
 ```
 
 随导航一起启动，并指定地图：
 
 ```bash
+source /opt/ros/humble/setup.bash
+source /home/wheeltec/xz/rtabmap_nav2_stack/install/setup.bash
 ros2 launch robot_bringup bringup.launch.py \
   mode:=navigation \
   database_path:=/data/maps/site_a/rtabmap.db \
   start_multi_waypoint_routes:=true \
   waypoint_map_id:=site_a \
   waypoint_map_frame_id:=map
+```
+
+也可以直接用脚本启动，脚本会自动 source 正确工作空间：
+
+```bash
+bash scripts/start_multi_waypoint_navigation.sh --map site_workspace --rviz
 ```
 
 RViz 操作：
