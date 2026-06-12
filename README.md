@@ -319,3 +319,5 @@ ros2 topic pub --once /multi_waypoint_route/command std_msgs/msg/String "{data: 
 ros2 topic echo /multi_waypoint_route/status
 ros2 topic echo /multi_waypoint_route/points
 ```
+
+如果在 RViz 中给目标点后没有出现 Path，可按 `docx/RViz目标点无Path排查README.md` 排查 Nav2 状态、TF、地图、代价地图和禁行区配置。
