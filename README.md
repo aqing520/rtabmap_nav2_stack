@@ -667,3 +667,99 @@ ros2 action list | grep -E 'navigate_to_pose|compute_path'
 8. 已确认 `rtabmap --version` 为 0.23.4，ROS 包来自当前工作空间。
 9. 已确认 `/map`、完整 TF 链、global costmap 和 planner server 正常。
 10. 已实际发送一个目标点并确认能够生成 Path。
+
+### 5.12 完整复现当前机器环境
+
+只复制本仓库还不能保证界面和导航行为完全一致。当前运行环境由以下四部分共同组成：
+
+1. 本仓库的源码和配置。
+2. 仓库外的 `~/wheeltec_ros2` 底盘工作空间。
+3. `/opt/ros/humble` 中安装的 ROS、RViz 和系统依赖。
+4. Git 默认忽略的地图数据库、PCD、设备权限和网络配置。
+
+当前导航 RViz 配置为：
+
+```text
+src/robot_bringup/config/nav2_navigation.rviz
+```
+
+`robot_bringup` 会把整个 `config/` 目录安装到工作空间，`bringup.launch.py` 通过包共享目录加载该 RViz 文件。因此只要源码版本一致并重新编译，RViz 中的 Fixed Frame、显示项、话题、颜色和工具配置也会一致。屏幕分辨率、窗口管理器和显卡驱动不同，窗口尺寸或停靠栏位置仍可能略有差异。
+
+以下配置同样属于必须交付的基础配置：
+
+```text
+src/robot_bringup/config/nav2_common.yaml
+src/robot_bringup/config/nav2_forbidden_area.yaml
+src/robot_bringup/config/navigate_to_pose_clear_costmaps_on_goal_start.xml
+src/robot_bringup/config/nav2_navigation.rviz
+src/FAST_LIO_ROS2/config/mid360.yaml
+src/livox_ros_driver2/config/MID360_config.json
+```
+
+注意：未提交的配置不会出现在另一台机器。发布前必须确认：
+
+```bash
+git status --short
+git diff -- src/robot_bringup/config
+```
+
+当前机器实际优先使用 `~/wheeltec_ros2/install` 中的 Nav2，而不是完全使用 apt 版本。其主要 Nav2 包为 1.1.6，部分本地包可能有单独版本。因此要做到完全一致，必须同时提供 `wheeltec_ros2` 的源码和准确提交版本，并在目标机器重新编译。仅安装 `ros-humble-navigation2` 不能保证行为一致。
+
+#### 导出环境快照
+
+在开发机执行：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+bash scripts/export_deployment_manifest.sh > deployment-source.txt
+```
+
+把源码、地图和外部工作空间部署完成后，在目标机器执行同一命令：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+bash scripts/export_deployment_manifest.sh > deployment-target.txt
+diff -u deployment-source.txt deployment-target.txt
+```
+
+该快照包括：
+
+- Ubuntu、内核、架构、JetPack/L4T 和 CUDA；
+- GCC、CMake、Python、OpenCV 和 PCL；
+- RViz、Nav2、RTAB-Map、FAST-LIO 和 Livox 包版本及实际加载路径；
+- 关键 apt 包版本；
+- 当前 Git 提交和未提交状态；
+- RViz、Nav2、雷达配置的 SHA256；
+- 数据库和 PCD 文件列表；
+- `wheeltec_ros2` 中各 `package.xml` 的 SHA256。
+
+必须重点确认以下项目没有差异：
+
+```text
+architecture
+JetPack / L4T
+ROS_DISTRO
+rviz2 version 和 prefix
+nav2_* version 和 prefix
+RTAB-Map 0.23.4 和动态库路径
+critical_config_sha256
+地图文件名称与大小
+wheeltec_ros2 源码校验值
+```
+
+如果要求连地图内容也逐字节一致，应额外生成地图校验值：
+
+```bash
+sha256sum /data/maps/site_a/rtabmap.db
+sha256sum cloud_map/*.pcd
+```
+
+建议固定使用相同目录：
+
+```text
+/home/wheeltec/wheeltec_ros2
+/home/wheeltec/xz/rtabmap_nav2_stack
+/data/maps/site_a/rtabmap.db
+```
+
+这是因为当前部分配置仍包含 `/home/wheeltec/xz/...` 绝对路径。若目标机器目录不同，必须先消除这些绝对路径，否则即使版本一致也可能出现 BT XML、地图或插件资源加载失败。

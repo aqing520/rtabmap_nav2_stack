@@ -125,7 +125,7 @@ controller_server:
       ObstaclesCritic:
         repulsion_weight: 2.0
         critical_weight: 18.0
-        inflation_radius: 0.35
+        inflation_radius: 0.40
         collision_margin_distance: 0.05
         collision_cost: 100000.0
         consider_footprint: false
@@ -181,7 +181,7 @@ local_costmap:
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 2.0
-        inflation_radius: 0.35
+        inflation_radius: 0.40
       always_send_full_costmap: true
 
 global_costmap:
