@@ -322,11 +322,22 @@ ros2 topic echo /multi_waypoint_route/points
 
 如果在 RViz 中给目标点后没有出现 Path，可按 `docx/RViz目标点无Path排查README.md` 排查 Nav2 状态、TF、地图、代价地图和禁行区配置。
 
-## 5. 编译与部署注意事项
+## 5. 局部代价地图动态障碍残留优化
+
+当前 Nav2 参数已将局部和全局动态障碍层从默认 `nav2_costmap_2d::VoxelLayer` 切换为 `spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer`。该方案通过时间衰减降低动态障碍离开后的 costmap 残留，重点配置在：
+
+```text
+src/robot_bringup/config/nav2_common.yaml
+src/robot_bringup/config/nav2_forbidden_area.yaml
+```
+
+完整说明、参数含义、验证方法和回退方式见 `docx/stvl_local_costmap_technical_report.md`。部署前需要确认目标机器已安装或能编译 `spatio_temporal_voxel_layer`，否则 Nav2 costmap 插件会加载失败。
+
+## 6. 编译与部署注意事项
 
 本章适用于把仓库部署到另一台机器狗或重新安装系统后的恢复。部署时必须区分三类内容：源码、编译产物和运行地图数据。
 
-### 5.1 版本基线
+### 6.1 版本基线
 
 当前项目验证环境如下：
 
@@ -347,7 +358,7 @@ ros2 topic echo /multi_waypoint_route/points
 
 目标机器应尽量保持相同的 Ubuntu、ROS、架构和主要依赖版本。不要把 ARM64 编译产物复制到 x86_64，也不要把其他 JetPack、ROS 发行版或旧系统上的 `build/`、`install/` 直接拿来运行。
 
-### 5.2 仓库中应该上传的内容
+### 6.2 仓库中应该上传的内容
 
 必须上传：
 
@@ -370,7 +381,7 @@ third_party/rtabmap-0.23.4/install/
 
 这些目录包含本机绝对路径、CMake 缓存、软链接和特定架构的动态库。即使上传后看起来文件齐全，也可能出现包来自旧目录、动态库 ABI 不匹配或运行时加载错误版本等问题。
 
-### 5.3 地图数据不会随 Git 自动部署
+### 6.3 地图数据不会随 Git 自动部署
 
 `.gitignore` 默认忽略以下运行数据：
 
@@ -409,7 +420,7 @@ find cloud_map -maxdepth 1 -type f -name '*.pcd' -ls
 
 地图数据库通常可以由 RTAB-Map 0.23.4 读取 0.22.0 创建的数据，但升级前必须保留原始备份。不要依赖 0.22.0 反向读取已经被 0.23.4 更新过的数据库。
 
-### 5.4 目标机器首次准备
+### 6.4 目标机器首次准备
 
 先安装 ROS 2 Humble、colcon、rosdep 和项目依赖。以下命令应在仓库根目录执行：
 
@@ -436,7 +447,7 @@ test -d src/livox_ros_driver2/3rdparty/Livox-SDK2 && echo OK
 git submodule update --init --recursive
 ```
 
-### 5.5 必须在目标机器干净编译
+### 6.5 必须在目标机器干净编译
 
 首次部署、切换机器、切换 ROS/JetPack/OpenCV，或 RTAB-Map 版本发生变化时，必须清理后完整编译：
 
@@ -466,7 +477,7 @@ JOBS=4 WORKERS=2 HEAVY_JOBS=1 bash scripts/do_build_all.sh
 
 不要单独执行普通的 `colcon build` 来替代首次完整构建，否则 `find_package(RTABMap)` 可能找到系统安装的 0.22.0。
 
-### 5.6 RTAB-Map 0.23.4 与系统 0.22.0
+### 6.6 RTAB-Map 0.23.4 与系统 0.22.0
 
 系统通过 apt 安装 `ros-humble-rtabmap*` 0.22.0 时，可以与项目的 0.23.4 共存，但不能混合链接或混合运行：
 
@@ -510,7 +521,7 @@ ldd "$RTABMAP_NODE" | grep -i rtabmap
 
 输出应指向本项目 `third_party/rtabmap-0.23.4/install/lib`，不能同时出现 0.22.0 和 0.23.4 的库路径。
 
-### 5.7 工作空间叠加顺序
+### 6.7 工作空间叠加顺序
 
 如果机器还安装了 `wheeltec_ros2` 或其他 ROS 2 工作空间，source 顺序决定最终使用哪个同名包。通用顺序是：
 
@@ -531,7 +542,7 @@ ros2 pkg prefix rtabmap_ros
 
 不要在不同终端使用不同的 source 顺序后分别启动同一套导航节点，否则可能出现消息接口、插件和参数版本不一致。
 
-### 5.8 路径和权限注意事项
+### 6.8 路径和权限注意事项
 
 启动文件默认地图路径为：
 
@@ -570,7 +581,7 @@ rg -n '/home/[^/]+/|/data/maps/' README.md scripts src/robot_bringup
 
 其中 `/data/maps/...` 可以作为约定的数据目录；指向旧用户目录的 `/home/...` 路径必须改为目标机器路径，或改用 ROS 包共享目录解析。
 
-### 5.9 启动导航前的完整检查
+### 6.9 启动导航前的完整检查
 
 每次部署后先执行：
 
@@ -601,7 +612,7 @@ bash scripts/start_with_global_localization.sh \
 /tmp/nav_logs/bringup.log
 ```
 
-### 5.10 地图无法加载或无法生成 Path
+### 6.10 地图无法加载或无法生成 Path
 
 Nav2 全局规划依赖以下链路全部正常：
 
@@ -655,7 +666,7 @@ ros2 action list | grep -E 'navigate_to_pose|compute_path'
 | BT Navigator 启动失败 | BT XML 写死了旧机器绝对路径 | 改为目标路径或使用包共享目录 |
 | 找不到插件/符号 | 复用了旧 `install/` 或混用了 0.22/0.23.4 | 全部清理，在目标机器重新编译 |
 
-### 5.11 发布部署包前检查清单
+### 6.11 发布部署包前检查清单
 
 1. 源码、脚本和 `third_party/rtabmap-0.23.4` 已提交。
 2. `build/`、`install/`、`log/` 和第三方编译目录未提交。
@@ -668,7 +679,7 @@ ros2 action list | grep -E 'navigate_to_pose|compute_path'
 9. 已确认 `/map`、完整 TF 链、global costmap 和 planner server 正常。
 10. 已实际发送一个目标点并确认能够生成 Path。
 
-### 5.12 完整复现当前机器环境
+### 6.12 完整复现当前机器环境
 
 只复制本仓库还不能保证界面和导航行为完全一致。当前运行环境由以下四部分共同组成：
 

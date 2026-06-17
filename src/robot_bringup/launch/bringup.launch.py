@@ -310,7 +310,7 @@ def generate_launch_description() -> LaunchDescription:
             'odom_frame_id': 'odom',
             'cmd_vel_in_topic': '/cmd_vel_nav',
             'cmd_vel_out_topic': '/cmd_vel',
-            'transform_tolerance': 0.3,
+            'transform_tolerance': 1.0,
             'source_timeout': 1.0,
             'base_shift_correction': True,
             'stop_pub_timeout': 1.0,
