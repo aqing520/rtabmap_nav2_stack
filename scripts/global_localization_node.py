@@ -181,7 +181,8 @@ class GlobalLocalizationClient(Node):
         self._call_sync(self._set_map_cli, map_req)
         self.get_logger().info("Map loaded. Waiting for scan on /cloud_registered_body ...")
 
-    def wait_and_query(self, max_retries: int = 3, scan_timeout: float = 30.0) -> bool:
+    def wait_and_query(self, max_retries: int = 3, scan_timeout: float = 30.0,
+                       min_inlier: float = 0.98) -> bool:
         """Block until scan arrives, run query, publish result. Returns success."""
         for attempt in range(1, max_retries + 1):
             arrived = self._result_event.wait(timeout=scan_timeout)
@@ -202,48 +203,65 @@ class GlobalLocalizationClient(Node):
             req.max_num_candidates = 1
             res = self._call_sync(self._query_cli, req)
 
-            if res.poses:
-                break
+            if not res.poses:
+                self.get_logger().warn(f"No pose candidates (attempt {attempt}), retrying with next scan ...")
+                self._done = False
+                self._result_event.clear()
+                continue
 
-            self.get_logger().warn(f"No pose candidates (attempt {attempt}), retrying with next scan ...")
-            # 重置，等下一帧扫描
-            self._done = False
-            self._result_event.clear()
-        else:
-            self.get_logger().error(f"No pose candidates after {max_retries} attempts")
-            return False
+            inlier = res.inlier_fractions[0]
+            error  = res.errors[0]
 
-        pose   = res.poses[0]
-        inlier = res.inlier_fractions[0]
-        error  = res.errors[0]
+            if inlier < min_inlier:
+                self.get_logger().warn(
+                    f"[{attempt}/{max_retries}] Low inlier fraction "
+                    f"({inlier:.3f} < {min_inlier}) — rejecting, retrying ..."
+                )
+                self._done = False
+                self._result_event.clear()
+                continue
 
-        q = pose.orientation
-        yaw = math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z))
+            # ── 成功：打印结果并发布 ──
+            pose = res.poses[0]
+            q = pose.orientation
+            yaw = math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z))
 
-        self.get_logger().info(
-            f"x={pose.position.x:.3f}  y={pose.position.y:.3f}  "
-            f"yaw={math.degrees(yaw):.1f}°  inlier={inlier:.3f}  err={error:.3f}"
+            self.get_logger().info(
+                f"x={pose.position.x:.3f}  y={pose.position.y:.3f}  "
+                f"yaw={math.degrees(yaw):.1f}°  inlier={inlier:.3f}  err={error:.3f}"
+            )
+
+            # 地面机器人只取 x, y, yaw，强制 z=0 / roll=0 / pitch=0
+            qx, qy, qz, qw = 0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)
+
+            out = PoseWithCovarianceStamped()
+            out.header.stamp = self.get_clock().now().to_msg()
+            out.header.frame_id = "map"
+            out.pose.pose.position.x = float(pose.position.x)
+            out.pose.pose.position.y = float(pose.position.y)
+            out.pose.pose.position.z = 0.0
+            out.pose.pose.orientation.x = qx
+            out.pose.pose.orientation.y = qy
+            out.pose.pose.orientation.z = qz
+            out.pose.pose.orientation.w = qw
+            out.pose.covariance = _COVARIANCE[:]
+            self._pub.publish(out)
+            self.get_logger().info("/initialpose published")
+            # 写标记文件，供启动脚本判断是否真正发布过
+            try:
+                marker = os.path.join("/tmp", "global_loc_published")
+                with open(marker, "w") as f:
+                    f.write("1")
+            except OSError:
+                pass
+            return True
+
+        self.get_logger().warn(
+            f"Failed after {max_retries} attempts — no /initialpose published. "
+            "You can manually set initial pose in RViz later."
         )
-        if inlier < 0.1:
-            self.get_logger().warn("Low inlier fraction — result may be unreliable")
-
-        # 地面机器人只取 x, y, yaw，强制 z=0 / roll=0 / pitch=0
-        qx, qy, qz, qw = 0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)
-
-        out = PoseWithCovarianceStamped()
-        out.header.stamp = self.get_clock().now().to_msg()
-        out.header.frame_id = "map"
-        out.pose.pose.position.x = float(pose.position.x)
-        out.pose.pose.position.y = float(pose.position.y)
-        out.pose.pose.position.z = 0.0
-        out.pose.pose.orientation.x = qx
-        out.pose.pose.orientation.y = qy
-        out.pose.pose.orientation.z = qz
-        out.pose.pose.orientation.w = qw
-        out.pose.covariance = _COVARIANCE[:]
-        self._pub.publish(out)
-        self.get_logger().info("/initialpose published")
-        return True
+        # exit 0 而非 1，不阻断启动脚本；Nav2 正常激活，后续人工 RViz 手动定位
+        return None
 
     # ── internal helpers ──
 
@@ -288,18 +306,23 @@ def main():
 
     try:
         node.setup()
-        success = node.wait_and_query()
+        result = node.wait_and_query()
     except KeyboardInterrupt:
-        success = False
+        result = False
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
-        success = False
+        result = False
     finally:
         rclpy.shutdown()          # 先让 spin() 退出
         spin_thread.join(timeout=3.0)  # 等 spin 线程结束
         node.destroy_node()       # 再销毁节点
 
-    sys.exit(0 if success else 1)
+    # True  = 已发布 /initialpose
+    # None  = 内点率不够，未发布（不阻断启动，后续人工定位）
+    # False = 实际错误（超时/服务不可用）
+    if result is False:
+        sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

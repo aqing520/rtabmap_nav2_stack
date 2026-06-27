@@ -95,8 +95,20 @@ sleep "$BRINGUP_WAIT_SEC"
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "【Phase 2】Global localization (engine=$ENGINE)"
-python3 "$SCRIPT_DIR/global_localization_node.py" ${PCD_PATH:+"$PCD_PATH"} --engine "$ENGINE"
-echo "  /initialpose published"
+_MARKER="/tmp/global_loc_published"
+rm -f "$_MARKER"
+if python3 "$SCRIPT_DIR/global_localization_node.py" ${PCD_PATH:+"$PCD_PATH"} --engine "$ENGINE"; then
+    if [[ -f "$_MARKER" ]]; then
+        echo "  /initialpose published"
+        rm -f "$_MARKER"
+    else
+        echo "  [WARN] Global localization skipped (low inlier) — no /initialpose published"
+        echo "  [WARN] Nav2 will start without localization. Set initial pose manually in RViz."
+    fi
+else
+    echo "  [WARN] Global localization failed — no /initialpose published"
+    echo "  [WARN] Nav2 will start without localization. Set initial pose manually in RViz."
+fi
 
 # ─────────────────────────────────────────────────────────────
 # Phase 3: 激活 Nav2（lifecycle manager）
