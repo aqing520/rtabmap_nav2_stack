@@ -6,6 +6,7 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
   scripts/fill_unknown_map_node.py
   scripts/multi_waypoint_route_node.py
+  scripts/nav2_controller_monitor.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

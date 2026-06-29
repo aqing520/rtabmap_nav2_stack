@@ -74,9 +74,11 @@ def generate_launch_description() -> LaunchDescription:
     start_camera = LaunchConfiguration('start_camera')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
+    enable_collision_monitor = LaunchConfiguration('enable_collision_monitor')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     delete_db_on_mapping_start = LaunchConfiguration('delete_db_on_mapping_start')
     database_path = LaunchConfiguration('database_path')
+    nav2_controller = LaunchConfiguration('nav2_controller')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     start_multi_waypoint_routes = LaunchConfiguration('start_multi_waypoint_routes')
     waypoint_map_id = LaunchConfiguration('waypoint_map_id')
@@ -86,6 +88,15 @@ def generate_launch_description() -> LaunchDescription:
     nav2_bringup_share = FindPackageShare('nav2_bringup')
     livox_share = FindPackageShare('livox_ros_driver2')
     fast_lio_share = FindPackageShare('fast_lio')
+    selected_nav2_params_file = PythonExpression([
+        "'", nav2_params_file, "' if '", nav2_params_file, "' else '",
+        PathJoinSubstitution([
+            robot_bringup_share,
+            'config',
+            PythonExpression(["'nav2_mppi.yaml' if '", nav2_controller, "' == 'mppi' else 'nav2_dwb.yaml'"]),
+        ]),
+        "'"
+    ])
 
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
@@ -97,6 +108,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('start_camera', default_value='false', description='Start Orbbec Gemini/Astra RGB-D camera'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
+        DeclareLaunchArgument('enable_collision_monitor', default_value='true', description='Filter Nav2 /cmd_vel through collision_monitor'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument(
             'delete_db_on_mapping_start',
@@ -105,7 +117,8 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
-        DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
+        DeclareLaunchArgument('nav2_controller', default_value='dwb', description='Nav2 local controller: dwb | mppi'),
+        DeclareLaunchArgument('nav2_params_file', default_value='', description='Optional Nav2 params file. Overrides nav2_controller when set.'),
         DeclareLaunchArgument('start_multi_waypoint_routes', default_value='false', description='Start RViz clicked-point waypoint manager'),
         DeclareLaunchArgument('waypoint_map_id', default_value='site_a', description='Map name/id attached to RViz waypoint collection'),
         DeclareLaunchArgument('waypoint_map_frame_id', default_value='map', description='Required frame_id for RViz clicked points'),
@@ -281,14 +294,14 @@ def generate_launch_description() -> LaunchDescription:
     nav2_launch = GroupAction(
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
         actions=[
-            SetRemap('/cmd_vel', '/cmd_vel_nav'),
+            SetRemap('/cmd_vel', '/cmd_vel_nav', condition=IfCondition(enable_collision_monitor)),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution([nav2_bringup_share, 'launch', 'navigation_launch.py'])),
                 launch_arguments={
                     'namespace': namespace,
                     'use_sim_time': use_sim_time,
                     'autostart': autostart,
-                    'params_file': nav2_params_file,
+                    'params_file': selected_nav2_params_file,
                     'use_composition': 'False',
                     'use_respawn': 'False',
                     'log_level': 'info',
@@ -303,7 +316,9 @@ def generate_launch_description() -> LaunchDescription:
         executable='collision_monitor',
         name='collision_monitor',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '", enable_collision_monitor, "' == 'true'"
+        ])),
         parameters=[{
             'use_sim_time': use_sim_time,
             'base_frame_id': 'base_footprint',
@@ -344,7 +359,9 @@ def generate_launch_description() -> LaunchDescription:
         executable='lifecycle_manager',
         name='lifecycle_manager_collision_monitor',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '", enable_collision_monitor, "' == 'true'"
+        ])),
         parameters=[{
             'use_sim_time': use_sim_time,
             'autostart': autostart,

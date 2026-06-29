@@ -1,0 +1,11 @@
+<class_libraries>
+  <library path="nav2_controller_benchmark">
+    <class
+      type="nav2_controller_benchmark::TimingController"
+      base_class_type="nav2_core::Controller">
+      <description>
+        Transparent controller wrapper publishing computeVelocityCommands wall time.
+      </description>
+    </class>
+  </library>
+</class_libraries>

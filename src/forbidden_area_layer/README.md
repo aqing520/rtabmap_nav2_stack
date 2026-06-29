@@ -111,6 +111,43 @@ message = future.result().message
 ros2 run forbidden_area_layer forbidden_area_client.py
 ```
 
+### 4. 使用命令行工具设置禁行区
+
+矩形禁行区：
+
+```bash
+ros2 run forbidden_area_layer forbidden_area_server set \
+  0.0 0.0 2.0 2.0 \
+  3.0 3.0 5.0 5.0
+```
+
+单个不规则多边形禁行区：
+
+```bash
+ros2 run forbidden_area_layer forbidden_area_server polygon \
+  0.0 0.0 \
+  2.0 0.0 \
+  1.5 1.5 \
+  0.0 2.0
+```
+
+多个不规则多边形禁行区，使用 `--` 分隔：
+
+```bash
+ros2 run forbidden_area_layer forbidden_area_server polygons \
+  0.0 0.0 2.0 0.0 1.0 1.0 \
+  -- \
+  3.0 3.0 5.0 3.0 4.0 5.0
+```
+
+清空禁行区：
+
+```bash
+ros2 run forbidden_area_layer forbidden_area_server clear
+```
+
+多边形顶点需要按边界顺时针或逆时针排列，每个多边形至少 3 个点。
+
 ## 与导航系统集成
 
 1. 在 `nav2_common.yaml` 中配置禁行区层：

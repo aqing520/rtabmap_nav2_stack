@@ -25,6 +25,9 @@ def generate_launch_description() -> LaunchDescription:
     database_path = LaunchConfiguration('database_path')
     enable_rviz   = LaunchConfiguration('enable_rviz')
     mode          = LaunchConfiguration('mode')
+    nav2_controller = LaunchConfiguration('nav2_controller')
+    nav2_params_file = LaunchConfiguration('nav2_params_file')
+    enable_collision_monitor = LaunchConfiguration('enable_collision_monitor')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
 
@@ -42,6 +45,21 @@ def generate_launch_description() -> LaunchDescription:
             'enable_rviz',
             default_value='false',
         ),
+        DeclareLaunchArgument(
+            'nav2_controller',
+            default_value='dwb',
+            description='Nav2 local controller: dwb | mppi',
+        ),
+        DeclareLaunchArgument(
+            'nav2_params_file',
+            default_value='',
+            description='Optional Nav2 params file. Overrides nav2_controller when set.',
+        ),
+        DeclareLaunchArgument(
+            'enable_collision_monitor',
+            default_value='true',
+            description='Filter Nav2 /cmd_vel through collision_monitor',
+        ),
     ]
 
     # ── 完整导航栈（Nav2 暂不自动激活）──
@@ -54,6 +72,9 @@ def generate_launch_description() -> LaunchDescription:
             'database_path': database_path,
             'enable_rviz':   enable_rviz,
             'autostart':     'false',
+            'nav2_controller': nav2_controller,
+            'nav2_params_file': nav2_params_file,
+            'enable_collision_monitor': enable_collision_monitor,
         }.items(),
     )
 
