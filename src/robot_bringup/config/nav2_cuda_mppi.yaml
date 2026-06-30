@@ -1,5 +1,5 @@
 # Suggested location:
-#   robot_bringup/config/nav2_common.yaml
+#   robot_bringup/config/nav2_cuda_mppi.yaml
 #
 # Design intent:
 # - RTAB-Map publishes /map and map -> odom.
@@ -86,56 +86,54 @@ controller_server:
       yaw_goal_tolerance: 1.57
 
     FollowPath:
-      plugin: dwb_core::DWBLocalPlanner
-      debug_trajectory_details: false
-      min_vel_x: 0.0
-      min_vel_y: 0.0
-      max_vel_x: 0.60
-      max_vel_y: 0.0
-      max_vel_theta: 1.00
-      min_speed_xy: 0.0
-      max_speed_xy: 0.60
-      min_speed_theta: 0.0
-      acc_lim_x: 0.8
-      acc_lim_y: 0.0
-      acc_lim_theta: 1.6
-      decel_lim_x: -1.0
-      decel_lim_y: 0.0
-      decel_lim_theta: -1.8
-      vx_samples: 24
-      vy_samples: 1
-      vtheta_samples: 32
-      sim_time: 1.7
-      linear_granularity: 0.05
-      angular_granularity: 0.025
+      # Converted from nav2_mppi_controller params in nav2_mppi.yaml.
+      # Direct mappings keep the same limits / horizon / noise settings.
+      # Approximate mappings:
+      # - PathAlignCritic -> path_weight
+      # - PathFollowCritic -> path_follow_weight
+      # - PathAngleCritic -> path_angle_weight
+      # - GoalAngleCritic -> goal_yaw_weight
+      # - ObstaclesCritic.repulsion_weight -> costmap_weight
+      # No direct CUDA equivalents: prune_distance, regenerate_noises,
+      # visualize, gamma, TwirlingCritic, and ObstaclesCritic critical/collision tuning.
+      plugin: "cuda_mppi_controller::CudaMppiController"
+      batch_size: 1500
+      time_steps: 48
+      model_dt: 0.07
+      iteration_count: 2
+      motion_model: "DiffDrive"
+      v_max: 0.60
+      v_min: 0.0
+      vy_max: 0.0
+      w_max: 1.00
+      min_turning_r: 0.2
+      v_std: 0.25
+      vy_std: 0.0
+      w_std: 0.25
+      consider_footprint: false
+      enable_retreat: true
+      retreat_scale: 0.5
+      temperature: 0.35
+      goal_weight: 20.0
+      goal_yaw_weight: 0.5
+      path_weight: 3.0
+      path_follow_weight: 5.0
+      path_angle_weight: 3.0
+      curvature_speed_weight: 1.0
+      curvature_speed_min: 0.18
+      follow_lookahead: 1.0
+      costmap_weight: 5.0
+      distance_field_weight: 2.0
+      distance_field_cutoff: 0.85
+      smoothness_weight: 0.3
+      backward_weight: 0.5
+      speed_weight: 0.5
+      angular_weight: 0.1
+      yaw_goal_activation_dist: 0.35
+      lookahead_dist: 2.5
       transform_tolerance: 2.0
-      trans_stopped_velocity: 0.05
-      short_circuit_trajectory_evaluation: false
-      stateful: true
-      critics:
-        - RotateToGoal
-        - Oscillation
-        - BaseObstacle
-        - GoalAlign
-        - PathAlign
-        - PathDist
-        - GoalDist
-      BaseObstacle:
-        scale: 1.20
-      PathAlign:
-        scale: 10.0
-        forward_point_distance: 0.20
-      GoalAlign:
-        scale: 8.0
-        forward_point_distance: 0.20
-      PathDist:
-        scale: 14.0
-      GoalDist:
-        scale: 14.0
-      RotateToGoal:
-        scale: 24.0
-        slowing_factor: 4.0
-        lookahead_time: -1.0
+      diagnostics_log_period: 0.0
+      diagnostics_csv_path: ""
 
 local_costmap:
   local_costmap:

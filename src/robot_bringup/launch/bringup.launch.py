@@ -93,7 +93,11 @@ def generate_launch_description() -> LaunchDescription:
         PathJoinSubstitution([
             robot_bringup_share,
             'config',
-            PythonExpression(["'nav2_mppi.yaml' if '", nav2_controller, "' == 'mppi' else 'nav2_dwb.yaml'"]),
+            PythonExpression([
+                "'nav2_cuda_mppi.yaml' if '", nav2_controller, "' == 'cuda_mppi' "
+                "else 'nav2_mppi.yaml' if '", nav2_controller, "' == 'mppi' "
+                "else 'nav2_dwb.yaml'"
+            ]),
         ]),
         "'"
     ])
@@ -117,7 +121,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
-        DeclareLaunchArgument('nav2_controller', default_value='dwb', description='Nav2 local controller: dwb | mppi'),
+        DeclareLaunchArgument('nav2_controller', default_value='dwb', description='Nav2 local controller: dwb | mppi | cuda_mppi'),
         DeclareLaunchArgument('nav2_params_file', default_value='', description='Optional Nav2 params file. Overrides nav2_controller when set.'),
         DeclareLaunchArgument('start_multi_waypoint_routes', default_value='false', description='Start RViz clicked-point waypoint manager'),
         DeclareLaunchArgument('waypoint_map_id', default_value='site_a', description='Map name/id attached to RViz waypoint collection'),

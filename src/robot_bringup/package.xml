@@ -25,6 +25,7 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>spatio_temporal_voxel_layer</exec_depend>
   <exec_depend>nav2_mppi_controller</exec_depend>
+  <exec_depend>cuda_mppi_controller</exec_depend>
   <exec_depend>dwb_core</exec_depend>
   <exec_depend>dwb_critics</exec_depend>
   <exec_depend>dwb_plugins</exec_depend>

@@ -341,8 +341,11 @@ src/robot_bringup/config/nav2_forbidden_area.yaml
 # 默认 DWB
 ros2 launch robot_bringup bringup.launch.py mode:=navigation nav2_controller:=dwb
 
-# 切换 MPPI
+# 切换 CPU MPPI
 ros2 launch robot_bringup bringup.launch.py mode:=navigation nav2_controller:=mppi
+
+# 切换 CUDA MPPI
+ros2 launch robot_bringup bringup.launch.py mode:=navigation nav2_controller:=cuda_mppi
 ```
 
 也可以直接指定完整参数文件，`nav2_params_file` 优先级高于 `nav2_controller`：
@@ -358,11 +361,18 @@ ros2 launch robot_bringup bringup.launch.py \
 ```text
 src/robot_bringup/config/nav2_dwb.yaml
 src/robot_bringup/config/nav2_mppi.yaml
+src/robot_bringup/config/nav2_cuda_mppi.yaml
 src/robot_bringup/scripts/nav2_controller_monitor.py
 src/nav2_controller_benchmark/
 ```
 
-`nav2_common.yaml` 和 `nav2_forbidden_area.yaml` 当前默认调为 DWB 参数，便于现场稳定运行；MPPI 参数保留在 `nav2_mppi.yaml` 中用于对比和回退。控制器运行时 CPU、内存、输出频率和计算耗时测试方法见 `src/nav2_controller_benchmark/README.md`。
+`nav2_common.yaml` 和 `nav2_forbidden_area.yaml` 当前默认调为 DWB 参数，便于现场稳定运行；CPU MPPI 参数保留在 `nav2_mppi.yaml` 中，CUDA MPPI 参数保留在 `nav2_cuda_mppi.yaml` 中，用于对比和回退。控制器运行时 CPU、内存、输出频率和计算耗时测试方法见 `src/nav2_controller_benchmark/README.md`。
+
+使用 CUDA MPPI 前需要先 source CUDA 控制器工作空间或把 `cuda_mppi_controller` 一起编进当前 overlay，确保下面命令能找到包：
+
+```bash
+ros2 pkg prefix cuda_mppi_controller
+```
 
 如果需要绕过 `collision_monitor` 直接观察 Nav2 控制器输出，可临时传入：
 
