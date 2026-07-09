@@ -45,6 +45,55 @@ rm -rf build install log
 bash scripts/do_build_all.sh
 ```
 
+### 0.3 视觉+LiDAR 快速启动
+
+以下命令用于 Orbbec RGB-D 相机 + Livox MID360 雷达的视觉+LiDAR 建图/导航链路。
+
+建图会启动 Livox、Orbbec、FAST-LIO、RTAB-Map 和 RViz，并默认重新写入 `rtabmap_orbbec.db`：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+source install/setup.bash
+ros2 launch robot_bringup fastlio_mapping_orbbec.launch.py \
+  sensor_profile:=lidar_rgbd \
+  start_livox:=true \
+  start_camera:=true \
+  use_sim_time:=false \
+  database_path:=/home/wheeltec/xz/rtabmap_nav2_stack/rtabmap_orbbec.db \
+  rviz:=true \
+  rtabmap_viz:=true \
+  delete_db_on_start:=true
+```
+
+导航会读取上一步生成的 `rtabmap_orbbec.db`，启动 Livox、Orbbec、FAST-LIO、RTAB-Map 定位、Nav2 和 RViz：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+source install/setup.bash
+ros2 launch robot_bringup bringup_orbbec.launch.py \
+  mode:=navigation \
+  sensor_profile:=lidar_rgbd \
+  start_livox:=true \
+  start_camera:=true \
+  use_sim_time:=false \
+  database_path:=/home/wheeltec/xz/rtabmap_nav2_stack/rtabmap_orbbec.db \
+  enable_rviz:=true \
+  autostart:=true
+```
+
+视觉+LiDAR 关键输入：
+
+```text
+/camera/color/image_raw
+/camera/depth/image_raw
+/camera/color/camera_info
+/rgbd_image
+/cloud_registered_body
+/Odometry
+```
+
+当前静态外参中，相机相对 `base_link` 为前方 `0.07m`、下方 `0.04m`、pitch `0.63rad`。如果重新安装相机，需要同步修改 `bringup_orbbec.launch.py` 和 `fastlio_mapping_orbbec.launch.py` 中的 `base_link -> camera_link`。
+
 ## 1. 仓库结构
 
 ```text

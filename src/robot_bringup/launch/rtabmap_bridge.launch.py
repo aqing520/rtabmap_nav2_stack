@@ -10,6 +10,7 @@ localization, while local continuous odometry comes from FAST-LIO.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
@@ -56,6 +57,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
         DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw'),
         DeclareLaunchArgument('depth_topic', default_value='/camera/depth/image_raw'),
+        DeclareLaunchArgument('depth_scale', default_value='1.0'),
         DeclareLaunchArgument('camera_info_topic', default_value='/camera/color/camera_info'),
         DeclareLaunchArgument('left_image_topic', default_value='/sensors/camera/left/image_rect'),
         DeclareLaunchArgument('right_image_topic', default_value='/sensors/camera/right/image_rect'),
@@ -94,6 +96,7 @@ def generate_launch_description() -> LaunchDescription:
             'rtabmap_viz': LaunchConfiguration('rtabmap_viz'),
             'rgb_topic': LaunchConfiguration('rgb_topic'),
             'depth_topic': LaunchConfiguration('depth_topic'),
+            'depth_scale': LaunchConfiguration('depth_scale'),
             'camera_info_topic': LaunchConfiguration('camera_info_topic'),
             'left_image_topic': LaunchConfiguration('left_image_topic'),
             'right_image_topic': LaunchConfiguration('right_image_topic'),
@@ -109,6 +112,32 @@ def generate_launch_description() -> LaunchDescription:
                 LaunchConfiguration('rtabmap_args'),
             ],
         }.items(),
+    )
+
+    rgbd_sync = Node(
+        package='rtabmap_sync',
+        executable='rgbd_sync',
+        name='rgbd_sync',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", LaunchConfiguration('sensor_profile'), "' == 'lidar_rgbd'"
+        ])),
+        parameters=[{
+            'approx_sync': True,
+            'approx_sync_max_interval': 0.03,
+            'topic_queue_size': 10,
+            'sync_queue_size': 10,
+            'qos': 2,
+            'qos_camera_info': 2,
+            'depth_scale': LaunchConfiguration('depth_scale'),
+        }],
+        remappings=[
+            ('rgb/image', LaunchConfiguration('rgb_topic')),
+            ('depth/image', LaunchConfiguration('depth_topic')),
+            ('rgb/camera_info', LaunchConfiguration('camera_info_topic')),
+            ('rgbd_image', 'rgbd_image'),
+        ],
+        namespace=LaunchConfiguration('namespace'),
     )
 
     fixed_map = Node(
@@ -127,6 +156,7 @@ def generate_launch_description() -> LaunchDescription:
     ld = LaunchDescription()
     for action in declare_args:
         ld.add_action(action)
+    ld.add_action(rgbd_sync)
     ld.add_action(rtabmap_launch)
     ld.add_action(fixed_map)
     return ld
