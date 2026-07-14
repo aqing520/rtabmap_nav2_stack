@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""RTAB-Map-led AMR bringup starter with Orbbec depth camera.
+"""RTAB-Map-led AMR bringup starter.
+
+Suggested location:
+  robot_bringup/launch/bringup.launch.py
 
 Assumptions:
 - RTAB-Map is the only publisher of map -> odom.
@@ -8,14 +11,13 @@ Assumptions:
 - Nav2 outputs /cmd_vel_nav → collision_monitor filters → /cmd_vel → wheeltec hardware.
 """
 
-import math
 import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
-from launch.launch_description_sources import AnyLaunchDescriptionSource, PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
@@ -27,7 +29,7 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = LaunchConfiguration('autostart')
     start_livox = LaunchConfiguration('start_livox')
-    start_camera = LaunchConfiguration('start_camera')
+    start_realsense = LaunchConfiguration('start_realsense')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
@@ -38,22 +40,23 @@ def generate_launch_description() -> LaunchDescription:
     nav2_bringup_share = FindPackageShare('nav2_bringup')
     livox_share = FindPackageShare('livox_ros_driver2')
     fast_lio_share = FindPackageShare('fast_lio')
-    astra_share = FindPackageShare('astra_camera')
 
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
         DeclareLaunchArgument('mode', default_value='navigation', description='mapping | localization | navigation'),
-        DeclareLaunchArgument('sensor_profile', default_value='lidar_rgbd', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
+        DeclareLaunchArgument('sensor_profile', default_value='lidar_stereo', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('autostart', default_value='true'),
         DeclareLaunchArgument('start_livox', default_value='false', description='Start Livox MID360 launch'),
-        DeclareLaunchArgument('start_camera', default_value='false', description='Start Orbbec depth camera launch'),
+        DeclareLaunchArgument('start_realsense', default_value='false', description='Start RealSense D435i launch'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='true', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
-        DeclareLaunchArgument('database_path', default_value='./rtabmap_orbbec.db'),
+        DeclareLaunchArgument('database_path', default_value='./rtabmap_realsense.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=
             "--Reg/Strategy 2 \
+            --Stereo/Gpu true \
+            --GFTT/Gpu true \
             --Vis/MaxFeatures 800 \
             --Vis/MinInliers 15 \
             --Grid/3D false \
@@ -66,11 +69,7 @@ def generate_launch_description() -> LaunchDescription:
             --Grid/RangeMin 0.0 \
             --Grid/RangeMax 20.0 "
         ),
-        # CUDA MPPI requires cuda_mppi_controller to be present in the sourced
-        # overlay.  If it is missing, controller_server fails to configure and
-        # the Nav2 lifecycle manager aborts before the global costmap is
-        # activated.  Make sure to source cuda_robotics_ws before launching.
-        DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_cuda_mppi.yaml'])),
+        DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_common.yaml'])),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
         DeclareLaunchArgument('rtabmap_odom_topic', default_value='/Odometry'),
@@ -78,12 +77,12 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('gps_fix_topic', default_value='/sensors/gps/fix'),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/cloud_registered_body'),
         DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw'),
-        DeclareLaunchArgument('depth_topic', default_value='/camera/depth/image_raw'),
+        DeclareLaunchArgument('depth_topic', default_value='/camera/aligned_depth_to_color/image_raw'),
         DeclareLaunchArgument('camera_info_topic', default_value='/camera/color/camera_info'),
-        DeclareLaunchArgument('left_image_topic', default_value='/camera/ir/image_raw'),
-        DeclareLaunchArgument('right_image_topic', default_value='/camera/ir2/image_raw'),
-        DeclareLaunchArgument('left_camera_info_topic', default_value='/camera/ir/camera_info'),
-        DeclareLaunchArgument('right_camera_info_topic', default_value='/camera/ir2/camera_info'),
+        DeclareLaunchArgument('left_image_topic', default_value='/camera/infra1/image_rect_raw'),
+        DeclareLaunchArgument('right_image_topic', default_value='/camera/infra2/image_rect_raw'),
+        DeclareLaunchArgument('left_camera_info_topic', default_value='/camera/infra1/camera_info'),
+        DeclareLaunchArgument('right_camera_info_topic', default_value='/camera/infra2/camera_info'),
     ]
 
     # ── 1. Livox MID360 driver ──
@@ -94,79 +93,85 @@ def generate_launch_description() -> LaunchDescription:
         ),
     )
 
-    # ── 1.2. Orbbec depth camera driver ──
-    # RGBD mode: color + depth (with depth registration)
-    orbbec_rgbd_node = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            PathJoinSubstitution([astra_share, 'launch', 'gemini.launch.xml'])),
+    # ── 1.2. RealSense D435i driver ──
+    realsense_rgbd_node = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        name='camera',
+        namespace='',
+        parameters=[{
+            'enable_color': True,
+            'enable_depth': True,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_accel': False,
+            'enable_gyro': False,
+            'depth_module.emitter_enabled': 1,
+            # 分辨率
+            'depth_module.depth_profile': '424x240x30',
+            'depth_module.infra_profile': '424x240x30',
+            'rgb_camera.color_profile': '424x240x30',
+            # === 功能配置 ===
+            'enable_sync': True, # 内部硬件同步
+            'align_depth.enable': True, # 深度对齐到彩色
+            'initial_reset': False, # 启动时不重置设备，避免丢帧
+
+        }],
         condition=IfCondition(PythonExpression([
-            "'", start_camera, "' == 'true' and '",
+            "'", start_realsense, "' == 'true' and '",
             sensor_profile, "' == 'lidar_rgbd'"
         ])),
-        launch_arguments={
-            'camera_name': 'camera',
-            'depth_registration': 'true',
-            'color_depth_synchronization': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'enable_ir': 'false',
-            'enable_point_cloud': 'false',
-            'enable_colored_point_cloud': 'false',
-            'publish_tf': 'false',  # We publish our own TF
-            'color_width': '640',
-            'color_height': '480',
-            'color_fps': '30',
-            'depth_width': '640',
-            'depth_height': '400',
-            'depth_fps': '30',
-            'depth_scale': '1',
-        }.items(),
     )
 
-    # Stereo mode: IR left + IR right (using stereo_s_u3 launch for Orbbec Stereo S U3)
-    orbbec_stereo_node = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            PathJoinSubstitution([astra_share, 'launch', 'stereo_s_u3.launch.xml'])),
+    realsense_stereo_node = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        name='camera',
+        namespace='',
+        parameters=[{
+            'enable_color': False,
+            'enable_depth': False,
+            'enable_infra1': True,
+            'enable_infra2': True,
+            'enable_accel': False,
+            'enable_gyro': False,
+            'depth_module.emitter_enabled': 0,
+            'depth_module.depth_profile': '640x480x30',
+            'depth_module.infra_profile': '640x480x30',
+            'rgb_camera.color_profile': '640x480x30',
+            'enable_sync': True, # 内部硬件同步
+            'align_depth.enable': False, # 深度对齐到彩色
+            'initial_reset': False, # 启动时不重置设备，避免丢帧
+        }],
         condition=IfCondition(PythonExpression([
-            "'", start_camera, "' == 'true' and '",
+            "'", start_realsense, "' == 'true' and '",
             sensor_profile, "' == 'lidar_stereo'"
         ])),
-        launch_arguments={
-            'camera_name': 'camera',
-            'depth_registration': 'false',
-            'enable_color': 'false',
-            'enable_depth': 'false',
-            'enable_ir': 'true',  # Enable IR for stereo
-            'enable_point_cloud': 'false',
-            'enable_colored_point_cloud': 'false',
-            'publish_tf': 'false',
-            'ir_width': '640',
-            'ir_height': '480',
-            'ir_fps': '30',
-        }.items(),
     )
-
-    # Mono mode: color only (no depth)
-    orbbec_mono_node = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            PathJoinSubstitution([astra_share, 'launch', 'gemini.launch.xml'])),
+    realsense_mono_node = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        name='camera',
+        namespace='',
+        parameters=[{
+            'enable_color': True,
+            'enable_depth': False,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_accel': False,
+            'enable_gyro': False,
+            'depth_module.emitter_enabled': 0,
+            'depth_module.depth_profile': '640x480x30',
+            'depth_module.infra_profile': '640x480x30',
+            'rgb_camera.color_profile': '640x480x30',
+            'enable_sync': True, # 内部硬件同步
+            'align_depth.enable': False, # 深度对齐到彩色
+            'initial_reset': False, # 启动时不重置设备，避免丢帧
+        }],
         condition=IfCondition(PythonExpression([
-            "'", start_camera, "' == 'true' and '",
+            "'", start_realsense, "' == 'true' and '",
             sensor_profile, "' == 'lidar_mono'"
         ])),
-        launch_arguments={
-            'camera_name': 'camera',
-            'depth_registration': 'false',
-            'enable_color': 'true',
-            'enable_depth': 'false',
-            'enable_ir': 'false',
-            'enable_point_cloud': 'false',
-            'enable_colored_point_cloud': 'false',
-            'publish_tf': 'false',
-            'color_width': '640',
-            'color_height': '480',
-            'color_fps': '30',
-        }.items(),
     )
 
     # ── 2. Static TFs ──
@@ -189,52 +194,10 @@ def generate_launch_description() -> LaunchDescription:
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_link_to_camera_link',
-        arguments=['0.07', '0.0', '-0.04', '0.0', '-0.63', '0.0', 'base_link', 'camera_link'],
+        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'camera_link'],
         condition=IfCondition(PythonExpression([
             "'", sensor_profile, "' != 'lidar_only' "
-        ])),
-    )
-
-    camera_color_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_link_to_camera_color_frame',
-        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'camera_link', 'camera_color_frame'],
-        condition=IfCondition(PythonExpression([
-            "'", sensor_profile, "' != 'lidar_only' "
-        ])),
-    )
-
-    camera_color_optical_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_color_frame_to_camera_color_optical_frame',
-        arguments=['0.0', '0.0', '0.0', str(-math.pi / 2.0), '0.0', str(-math.pi / 2.0),
-                   'camera_color_frame', 'camera_color_optical_frame'],
-        condition=IfCondition(PythonExpression([
-            "'", sensor_profile, "' != 'lidar_only' "
-        ])),
-    )
-
-    camera_depth_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_link_to_camera_depth_frame',
-        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'camera_link', 'camera_depth_frame'],
-        condition=IfCondition(PythonExpression([
-            "'", sensor_profile, "' != 'lidar_only' "
-        ])),
-    )
-
-    camera_depth_optical_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_depth_frame_to_camera_depth_optical_frame',
-        arguments=['0.0', '0.0', '0.0', str(-math.pi / 2.0), '0.0', str(-math.pi / 2.0),
-                   'camera_depth_frame', 'camera_depth_optical_frame'],
-        condition=IfCondition(PythonExpression([
-            "'", sensor_profile, "' != 'lidar_only' "
-        ])),
+        ])), # 仅在启动相机时发布此 TF
     )
 
     # ── 3. FAST-LIO (replaces icp_odometry + EKF) ──
@@ -294,7 +257,6 @@ def generate_launch_description() -> LaunchDescription:
             'scan_cloud_topic': LaunchConfiguration('scan_cloud_topic'),
             'rgb_topic': LaunchConfiguration('rgb_topic'),
             'depth_topic': LaunchConfiguration('depth_topic'),
-            'depth_scale': '1.0',
             'camera_info_topic': LaunchConfiguration('camera_info_topic'),
             'left_image_topic': LaunchConfiguration('left_image_topic'),
             'right_image_topic': LaunchConfiguration('right_image_topic'),
@@ -317,6 +279,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     # ── 6. Nav2 ──
+    # Remap /cmd_vel → /cmd_vel_nav so collision_monitor can intercept before the hardware.
     nav2_launch = GroupAction(
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
         actions=[
@@ -406,19 +369,15 @@ def generate_launch_description() -> LaunchDescription:
 
     for action in declare_args:
         ld.add_action(action)
-
+        
     ld.add_action(base_tf)
     ld.add_action(livox_tf)
     ld.add_action(camera_tf)
-    ld.add_action(camera_color_tf)
-    ld.add_action(camera_color_optical_tf)
-    ld.add_action(camera_depth_tf)
-    ld.add_action(camera_depth_optical_tf)
 
     ld.add_action(livox_launch)
-    ld.add_action(orbbec_rgbd_node)
-    ld.add_action(orbbec_stereo_node)
-    ld.add_action(orbbec_mono_node)
+    ld.add_action(realsense_rgbd_node) 
+    ld.add_action(realsense_stereo_node) 
+    ld.add_action(realsense_mono_node) 
     ld.add_action(fast_lio_launch)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)

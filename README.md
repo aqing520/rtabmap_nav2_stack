@@ -92,7 +92,7 @@ ros2 launch robot_bringup bringup_orbbec.launch.py \
 /Odometry
 ```
 
-当前静态外参中，相机相对 `base_link` 为前方 `0.07m`、下方 `0.04m`、pitch `0.63rad`。如果重新安装相机，需要同步修改 `bringup_orbbec.launch.py` 和 `fastlio_mapping_orbbec.launch.py` 中的 `base_link -> camera_link`。
+当前静态 TF 中，`base_link -> camera_link` 保持零位姿占位；如果后续需要相机实测外参，再同步修改 `bringup_orbbec.launch.py` 和 `fastlio_mapping_orbbec.launch.py`。
 
 ## 1. 仓库结构
 
