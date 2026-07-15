@@ -17,6 +17,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource, PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node, SetRemap
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -26,10 +27,12 @@ def generate_launch_description() -> LaunchDescription:
     sensor_profile = LaunchConfiguration('sensor_profile')
     use_sim_time = LaunchConfiguration('use_sim_time')
     autostart = LaunchConfiguration('autostart')
+    enable_startup_localization_guard = LaunchConfiguration('enable_startup_localization_guard')
     start_livox = LaunchConfiguration('start_livox')
     start_camera = LaunchConfiguration('start_camera')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
+    enable_rtabmap_viz = LaunchConfiguration('enable_rtabmap_viz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     database_path = LaunchConfiguration('database_path')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
@@ -39,6 +42,17 @@ def generate_launch_description() -> LaunchDescription:
     livox_share = FindPackageShare('livox_ros_driver2')
     fast_lio_share = FindPackageShare('fast_lio')
     astra_share = FindPackageShare('astra_camera')
+    effective_autostart = PythonExpression([
+        "'false' if '", enable_startup_localization_guard,
+        "' == 'true' else '", autostart, "'"
+    ])
+    effective_rtabmap_args = [
+        LaunchConfiguration('rtabmap_args'),
+        PythonExpression([
+            "' --Rtabmap/LoopThr ", LaunchConfiguration('startup_min_hypothesis'),
+            "' if '", enable_startup_localization_guard, "' == 'true' else ''"
+        ]),
+    ]
 
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
@@ -46,10 +60,61 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('sensor_profile', default_value='lidar_rgbd', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('autostart', default_value='true'),
+        DeclareLaunchArgument(
+            'enable_startup_localization_guard',
+            default_value='false',
+            description='Keep Nav2 inactive until RTAB-Map accepts a startup visual localization.',
+        ),
+        DeclareLaunchArgument('startup_sensor_wait_timeout', default_value='30.0'),
+        DeclareLaunchArgument('startup_localization_timeout', default_value='20.0'),
+        DeclareLaunchArgument('startup_service_wait_timeout', default_value='30.0'),
+        DeclareLaunchArgument(
+            'startup_min_hypothesis',
+            default_value='0.11',
+            description=(
+                'Minimum RTAB-Map visual hypothesis. When the startup guard is '
+                'enabled, this is applied to both Rtabmap/LoopThr and the guard.'
+            ),
+        ),
+        DeclareLaunchArgument('startup_min_visual_inliers', default_value='15'),
+        DeclareLaunchArgument('startup_min_visual_inliers_ratio', default_value='0.0'),
+        DeclareLaunchArgument(
+            'startup_min_best_second_ratio',
+            default_value='1.0',
+            description='Minimum best/second posterior ratio. 1.0 disables this extra check.',
+        ),
+        DeclareLaunchArgument('startup_max_optimization_error_ratio', default_value='3.0'),
+        DeclareLaunchArgument('startup_max_linear_variance', default_value='1.0'),
+        DeclareLaunchArgument('startup_max_yaw_variance', default_value='1.0'),
+        DeclareLaunchArgument('startup_required_confirmations', default_value='1'),
+        DeclareLaunchArgument(
+            'allow_last_pose_fallback',
+            default_value='false',
+            description='Activate Nav2 with the last database pose when startup visual localization times out.',
+        ),
+        DeclareLaunchArgument(
+            'startup_info_topic',
+            default_value='info',
+            description='RTAB-Map Info topic, relative to namespace unless an absolute name is supplied.',
+        ),
+        DeclareLaunchArgument(
+            'startup_localization_pose_topic',
+            default_value='localization_pose',
+            description='RTAB-Map localization pose topic.',
+        ),
+        DeclareLaunchArgument(
+            'navigation_manager_service',
+            default_value='/lifecycle_manager_navigation/manage_nodes',
+        ),
+        DeclareLaunchArgument(
+            'collision_manager_service',
+            default_value='/lifecycle_manager_collision_monitor/manage_nodes',
+        ),
         DeclareLaunchArgument('start_livox', default_value='false', description='Start Livox MID360 launch'),
         DeclareLaunchArgument('start_camera', default_value='false', description='Start Orbbec depth camera launch'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='true', description='Launch RViz with Nav2 navigation config'),
+        DeclareLaunchArgument('enable_rtabmap_viz', default_value='false', description='Launch the RTAB-Map visualization window'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument('database_path', default_value='./rtabmap_orbbec.db'),
         DeclareLaunchArgument('rtabmap_args', default_value=
@@ -285,7 +350,7 @@ def generate_launch_description() -> LaunchDescription:
             'enable_gps': enable_gps,
             'localization': PythonExpression(["'true' if '", mode, "' != 'mapping' else 'false'"]),
             'database_path': database_path,
-            'rtabmap_args': LaunchConfiguration('rtabmap_args'),
+            'rtabmap_args': effective_rtabmap_args,
             'frame_id': LaunchConfiguration('rtabmap_frame_id'),
             'map_frame_id': LaunchConfiguration('rtabmap_map_frame'),
             'odom_topic': LaunchConfiguration('rtabmap_odom_topic'),
@@ -301,7 +366,7 @@ def generate_launch_description() -> LaunchDescription:
             'left_camera_info_topic': LaunchConfiguration('left_camera_info_topic'),
             'right_camera_info_topic': LaunchConfiguration('right_camera_info_topic'),
             'rviz': 'false',
-            'rtabmap_viz': 'true'
+            'rtabmap_viz': enable_rtabmap_viz,
         }.items(),
     )
 
@@ -316,6 +381,55 @@ def generate_launch_description() -> LaunchDescription:
         arguments=['-d', nav2_rviz_config],
     )
 
+    # ── 5c. Startup localization gate ──
+    # RTAB-Map keeps running as the localization backend. This one-shot
+    # supervisor only delays Nav2 activation until RTAB-Map accepts a global
+    # visual loop closure and publishes a localization pose with sane
+    # covariance.
+    startup_localization_guard = Node(
+        package='robot_bringup',
+        executable='rtabmap_startup_localization_guard.py',
+        name='rtabmap_startup_localization_guard',
+        namespace=namespace,
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '",
+            enable_startup_localization_guard, "' == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'info_topic': LaunchConfiguration('startup_info_topic'),
+            'localization_pose_topic': LaunchConfiguration('startup_localization_pose_topic'),
+            'navigation_manager_service': LaunchConfiguration('navigation_manager_service'),
+            'collision_manager_service': LaunchConfiguration('collision_manager_service'),
+            'sensor_wait_timeout_sec': ParameterValue(
+                LaunchConfiguration('startup_sensor_wait_timeout'), value_type=float),
+            'localization_timeout_sec': ParameterValue(
+                LaunchConfiguration('startup_localization_timeout'), value_type=float),
+            'service_wait_timeout_sec': ParameterValue(
+                LaunchConfiguration('startup_service_wait_timeout'), value_type=float),
+            'min_hypothesis': ParameterValue(
+                LaunchConfiguration('startup_min_hypothesis'), value_type=float),
+            'min_visual_inliers': ParameterValue(
+                LaunchConfiguration('startup_min_visual_inliers'), value_type=int),
+            'min_visual_inliers_ratio': ParameterValue(
+                LaunchConfiguration('startup_min_visual_inliers_ratio'), value_type=float),
+            'min_best_second_ratio': ParameterValue(
+                LaunchConfiguration('startup_min_best_second_ratio'), value_type=float),
+            'max_optimization_error_ratio': ParameterValue(
+                LaunchConfiguration('startup_max_optimization_error_ratio'), value_type=float),
+            'max_linear_variance': ParameterValue(
+                LaunchConfiguration('startup_max_linear_variance'), value_type=float),
+            'max_yaw_variance': ParameterValue(
+                LaunchConfiguration('startup_max_yaw_variance'), value_type=float),
+            'required_confirmations': ParameterValue(
+                LaunchConfiguration('startup_required_confirmations'), value_type=int),
+            'allow_last_pose_fallback': ParameterValue(
+                LaunchConfiguration('allow_last_pose_fallback'), value_type=bool),
+            'activate_collision_monitor': True,
+        }],
+    )
+
     # ── 6. Nav2 ──
     nav2_launch = GroupAction(
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
@@ -326,7 +440,7 @@ def generate_launch_description() -> LaunchDescription:
                 launch_arguments={
                     'namespace': namespace,
                     'use_sim_time': use_sim_time,
-                    'autostart': autostart,
+                    'autostart': effective_autostart,
                     'params_file': nav2_params_file,
                     'use_composition': 'False',
                     'use_respawn': 'False',
@@ -386,7 +500,7 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'autostart': autostart,
+            'autostart': effective_autostart,
             'node_names': ['collision_monitor'],
         }],
     )
@@ -423,6 +537,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
     ld.add_action(rviz_node)
+    ld.add_action(startup_localization_guard)
     ld.add_action(nav2_launch)
     ld.add_action(collision_monitor)
     ld.add_action(collision_monitor_lifecycle)

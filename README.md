@@ -81,6 +81,96 @@ ros2 launch robot_bringup bringup_orbbec.launch.py \
   autostart:=true
 ```
 
+需要在启动时先完成一次 RTAB-Map 视觉重定位、确认成功后再激活
+Nav2 时，使用：
+
+```bash
+bash scripts/start_orbbec_navigation_guarded.sh
+```
+
+该脚本会令 Nav2 和 collision monitor 先保持未激活状态。监督节点监听
+RTAB-Map 的回环候选、视觉内点和定位协方差；重定位通过后依次激活
+collision monitor 和 Nav2。默认超时后不会自动导航，可在确认机器人没有
+被搬动时显式允许使用数据库中上次保存的位置：
+
+```bash
+ALLOW_LAST_POSE_FALLBACK=true \
+  bash scripts/start_orbbec_navigation_guarded.sh
+```
+
+常用阈值也可以直接作为 Launch 参数覆盖：
+
+```bash
+bash scripts/start_orbbec_navigation_guarded.sh \
+  startup_localization_timeout:=30.0 \
+  startup_min_hypothesis:=0.15 \
+  startup_min_visual_inliers:=20
+```
+
+启用监督时，`startup_min_hypothesis` 会同时设置 RTAB-Map 内部的
+`Rtabmap/LoopThr` 和监督节点的二次检查阈值，避免两套相似度阈值不一致。
+
+如果希望由一个独立包直接读取地图数据库、从当前 RGB-D 画面计算初始
+位置并发布 `/initialpose`，使用：
+
+```bash
+cd ~/xz/rtabmap_nav2_stack
+bash scripts/start_orbbec_navigation_visual_initial_pose.sh
+```
+
+该入口使用 `visual_initial_pose` 包。启动时 Nav2 和 collision monitor
+保持未激活，节点以只读方式加载 `rtabmap_orbbec.db` 中的全部定位节点，
+按固定间隔处理 `/rgbd_image`，并使用 RTAB-Map 的词袋候选和纯视觉几何
+配准（`Reg/Strategy=0`）寻找当前画面的位置。默认判定条件包括：
+
+- RTAB-Map 接受了回环候选；
+- 候选相似度不低于 `0.11`；
+- 视觉内点不少于 `15`；
+- 候选没有被 RTAB-Map 拒绝；
+- 图优化误差和定位协方差在配置范围内。
+
+通过检查后会发布一次锁存的 `/visual_initialpose`，并默认连续三次发布
+`/initialpose`。主 RTAB-Map 节点收到初始位姿后，根据当前
+`odom -> base_footprint` 计算并更新 `map -> odom`。独立节点确认
+`map -> base_footprint` 已接近视觉结果后，再依次激活 collision monitor
+和 Nav2。
+
+常用参数可以在启动命令后覆盖：
+
+```bash
+bash scripts/start_orbbec_navigation_visual_initial_pose.sh \
+  min_hypothesis:=0.15 \
+  min_visual_inliers:=20 \
+  min_best_second_ratio:=1.2 \
+  localization_timeout_sec:=45.0
+```
+
+默认匹配超时只告警并继续搜索，不会自动启用导航。如果确认机器人没有
+在关机期间被移动，可以显式允许使用数据库最后保存的位置：
+
+```bash
+ALLOW_LAST_POSE_FALLBACK=true \
+  bash scripts/start_orbbec_navigation_visual_initial_pose.sh
+```
+
+也可以只启动视觉初始位姿节点进行调试；此时需要外部已经提供
+`/rgbd_image` 和相机 TF：
+
+```bash
+ros2 launch visual_initial_pose visual_initial_pose.launch.py \
+  database_path:="$PWD/rtabmap_orbbec.db"
+```
+
+调试话题：
+
+```text
+/visual_initialpose
+/visual_initial_pose/status
+/visual_initial_pose/success
+/visual_initial_pose/candidate_id
+/visual_initial_pose/candidate_score
+```
+
 视觉+LiDAR 关键输入：
 
 ```text
@@ -92,7 +182,10 @@ ros2 launch robot_bringup bringup_orbbec.launch.py \
 /Odometry
 ```
 
-当前静态 TF 中，`base_link -> camera_link` 保持零位姿占位；如果后续需要相机实测外参，再同步修改 `bringup_orbbec.launch.py` 和 `fastlio_mapping_orbbec.launch.py`。
+当前静态 TF 中，`base_link -> camera_link` 使用
+`xyz=(0.07, 0.0, -0.04)`、`rpy=(0.0, -0.63, 0.0)`；如果后续重新标定
+相机外参，需要同步修改 `bringup_orbbec.launch.py` 和
+`fastlio_mapping_orbbec.launch.py`。
 
 ## 1. 仓库结构
 
@@ -106,6 +199,7 @@ rtabmap_nav2_stack/                 # 工作空间
 │   │   │   └── rtabmap_bridge.launch.py # 负责将 RTAB-Map 的输出桥接到 Nav2 栈
 │   │   └── config/                 # 核心参数配置目录
 │   │       └── nav2_common.yaml    # Navigation 2 配置
+│   ├── visual_initial_pose/         # RTAB-Map 数据库视觉匹配并发布 /initialpose
 │   ├── FAST_LIO_ROS2/              # FAST-LIO 激光惯性紧耦合里程计（提供 odom 和去畸变点云）
 │   ├── livox_ros_driver2/          # Livox MID360 雷达驱动
 │   └── rtabmap_ros/                # 官方 RTAB-Map ROS 2 包装层

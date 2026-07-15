@@ -1,0 +1,48 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+    database_path: "./rtabmap_orbbec.db"
+    rgbd_topic: "/rgbd_image"
+    map_frame: "map"
+    base_frame: "base_footprint"
+    visual_pose_topic: "/visual_initialpose"
+    initialpose_topic: "/initialpose"
+    status_topic: "/visual_initial_pose/status"
+
+    process_interval_sec: 1.0
+    sensor_wait_timeout_sec: 30.0
+    localization_timeout_sec: 30.0
+    continue_search_after_timeout: true
+
+    min_hypothesis: 0.11
+    min_visual_inliers: 15
+    min_visual_inliers_ratio: 0.0
+    min_best_second_ratio: 1.0
+    max_optimization_error_ratio: 3.0
+    max_linear_variance: 1.0
+    max_yaw_variance: 1.0
+    required_confirmations: 1
+
+    detector_strategy: -1
+    feature_type: -1
+    max_features: 800
+    estimation_type: -1
+    flatten_to_2d: true
+
+    publish_initialpose: true
+    initialpose_publish_repetitions: 3
+    initialpose_publish_interval_sec: 0.2
+    fallback_linear_variance: 0.25
+    fallback_yaw_variance: 0.068
+    allow_last_pose_fallback: false
+
+    activate_nav2_on_success: false
+    activate_collision_monitor: true
+    tf_confirmation_timeout_sec: 10.0
+    tf_settle_delay_sec: 0.5
+    tf_confirmation_linear_tolerance: 0.5
+    tf_confirmation_yaw_tolerance: 0.5
+    lifecycle_service_timeout_sec: 30.0
+    navigation_manager_service: "/lifecycle_manager_navigation/manage_nodes"
+    collision_manager_service: "/lifecycle_manager_collision_monitor/manage_nodes"
