@@ -26,9 +26,9 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_rviz', default_value='true'),
         DeclareLaunchArgument('enable_rtabmap_viz', default_value='false'),
         DeclareLaunchArgument('allow_last_pose_fallback', default_value='false'),
-        DeclareLaunchArgument('min_hypothesis', default_value='0.11'),
-        DeclareLaunchArgument('min_visual_inliers', default_value='15'),
-        DeclareLaunchArgument('min_best_second_ratio', default_value='1.0'),
+        DeclareLaunchArgument('min_hypothesis', default_value='0.08'),
+        DeclareLaunchArgument('min_visual_inliers', default_value='10'),
+        DeclareLaunchArgument('min_best_second_ratio', default_value='0.8'),
         DeclareLaunchArgument('localization_timeout_sec', default_value='30.0'),
     ]
 

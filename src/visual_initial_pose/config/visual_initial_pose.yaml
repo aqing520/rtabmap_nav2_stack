@@ -15,18 +15,18 @@
     localization_timeout_sec: 30.0
     continue_search_after_timeout: true
 
-    min_hypothesis: 0.11
-    min_visual_inliers: 15
+    min_hypothesis: 0.08
+    min_visual_inliers: 10
     min_visual_inliers_ratio: 0.0
-    min_best_second_ratio: 1.0
+    min_best_second_ratio: 0.8
     max_optimization_error_ratio: 3.0
     max_linear_variance: 1.0
     max_yaw_variance: 1.0
-    required_confirmations: 1
+    required_confirmations: 2
 
     detector_strategy: -1
     feature_type: -1
-    max_features: 800
+    max_features: 1500
     estimation_type: -1
     flatten_to_2d: true
 
