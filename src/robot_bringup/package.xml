@@ -13,7 +13,9 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>action_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>map_paint_editor_plugin</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>rtabmap_msgs</exec_depend>
@@ -30,6 +32,7 @@
   <exec_depend>dwb_core</exec_depend>
   <exec_depend>dwb_critics</exec_depend>
   <exec_depend>dwb_plugins</exec_depend>
+  <exec_depend>forbidden_area_layer</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

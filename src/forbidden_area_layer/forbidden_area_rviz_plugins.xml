@@ -1,0 +1,8 @@
+<library path="forbidden_area_rviz_tool">
+  <class
+    name="forbidden_area_layer/AddForbiddenArea"
+    type="forbidden_area_layer::ForbiddenAreaTool"
+    base_class_type="rviz_common::Tool">
+    <description>Drag a rectangle on the map and append it as a Nav2 forbidden area.</description>
+  </class>
+</library>

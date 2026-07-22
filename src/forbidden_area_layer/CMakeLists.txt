@@ -13,6 +13,9 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(rviz_common REQUIRED)
+find_package(rviz_rendering REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 # 生成消息和服务
 # rosidl_generate_interfaces 会占用 ${PROJECT_NAME} 这个 target 名，
@@ -69,9 +72,35 @@ target_link_libraries(forbidden_area_server
   ${cpp_typesupport_target}
 )
 
+# ── RViz 禁行区绘制工具 ──────────────────────────────────────────
+add_library(forbidden_area_rviz_tool SHARED
+  src/forbidden_area_tool.cpp
+)
+
+target_include_directories(forbidden_area_rviz_tool PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(forbidden_area_rviz_tool
+  rclcpp
+  geometry_msgs
+  pluginlib
+  rviz_common
+  rviz_rendering
+  visualization_msgs
+  rosidl_default_runtime
+)
+
+target_link_libraries(forbidden_area_rviz_tool
+  ${cpp_typesupport_target}
+)
+
+pluginlib_export_plugin_description_file(rviz_common forbidden_area_rviz_plugins.xml)
+
 # ── 安装 ─────────────────────────────────────────────────────────
 install(
-  TARGETS ${PLUGIN_LIB} forbidden_area_server
+  TARGETS ${PLUGIN_LIB} forbidden_area_server forbidden_area_rviz_tool
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -81,7 +110,7 @@ install(
 )
 
 install(
-  FILES forbidden_area_layer.xml
+  FILES forbidden_area_layer.xml forbidden_area_rviz_plugins.xml
   DESTINATION share/${PROJECT_NAME}
 )
 

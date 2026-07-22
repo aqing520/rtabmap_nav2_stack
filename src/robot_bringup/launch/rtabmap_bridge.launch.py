@@ -67,6 +67,11 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('rtabmap_viz', default_value='false'),
         DeclareLaunchArgument('wait_imu_to_init', default_value='false'),
         DeclareLaunchArgument('delete_db_on_start', default_value='false'),
+        DeclareLaunchArgument(
+            'map_topic',
+            default_value='map',
+            description='RTAB-Map occupancy-grid output topic.',
+        ),
     ]
 
     rtabmap_launch = IncludeLaunchDescription(
@@ -78,6 +83,7 @@ def generate_launch_description() -> LaunchDescription:
             'database_path': LaunchConfiguration('database_path'),
             'frame_id': LaunchConfiguration('frame_id'),
             'map_frame_id': LaunchConfiguration('map_frame_id'),
+            'map_topic': LaunchConfiguration('map_topic'),
             'publish_tf_map': 'true',
             'odom_topic': LaunchConfiguration('odom_topic'),
             'publish_tf_odom': 'false',
