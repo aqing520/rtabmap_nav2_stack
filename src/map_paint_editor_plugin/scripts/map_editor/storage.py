@@ -7,6 +7,13 @@ from nav_msgs.msg import OccupancyGrid
 from .occupancy import MapFiles, grid_to_pgm_image, quaternion_to_yaw, yaw_to_quaternion
 
 
+DEFAULT_OCCUPIED_THRESH = 0.65
+# Unknown cells are stored as grayscale 205. Their occupancy probability is
+# (255 - 205) / 255 ~= 0.196078, so the free threshold must stay below that
+# value. Otherwise map_server and this editor both decode unknown cells as free.
+DEFAULT_FREE_THRESH = 0.196
+
+
 class MapStorage:
     def __init__(self, yaml_path: str):
         self.yaml_path = Path(yaml_path).expanduser()
@@ -15,7 +22,8 @@ class MapStorage:
     def save(self, grid, map_info) -> MapFiles:
         self.yaml_path.parent.mkdir(parents=True, exist_ok=True)
         image = grid_to_pgm_image(grid)
-        cv2.imwrite(str(self.image_path), image)
+        if not cv2.imwrite(str(self.image_path), image):
+            raise RuntimeError('Cannot write map image: %s' % self.image_path)
 
         origin = map_info.origin
         yaw = quaternion_to_yaw(
@@ -30,14 +38,16 @@ class MapStorage:
             'resolution: %.10f\n'
             'origin: [%.10f, %.10f, %.10f]\n'
             'negate: 0\n'
-            'occupied_thresh: 0.65\n'
-            'free_thresh: 0.25\n'
+            'occupied_thresh: %.3f\n'
+            'free_thresh: %.3f\n'
             % (
                 self.image_path.name,
                 map_info.resolution,
                 origin.position.x,
                 origin.position.y,
                 yaw,
+                DEFAULT_OCCUPIED_THRESH,
+                DEFAULT_FREE_THRESH,
             ),
             encoding='utf-8',
         )
@@ -51,20 +61,25 @@ class MapStorage:
             raise RuntimeError('Cannot read map image: %s' % image_path)
 
         negate = int(values.get('negate', '0'))
-        occupied_thresh = float(values.get('occupied_thresh', '0.65'))
-        free_thresh = float(values.get('free_thresh', '0.25'))
+        occupied_thresh = float(
+            values.get('occupied_thresh', str(DEFAULT_OCCUPIED_THRESH)))
+        free_thresh = float(values.get('free_thresh', str(DEFAULT_FREE_THRESH)))
         resolution = float(values['resolution'])
         origin_values = self._parse_origin(values.get('origin', '[0.0, 0.0, 0.0]'))
+
+        if not 0.0 <= free_thresh < occupied_thresh <= 1.0:
+            raise RuntimeError(
+                'Invalid map thresholds: expected 0 <= free_thresh < '
+                'occupied_thresh <= 1, got free_thresh=%s, occupied_thresh=%s'
+                % (free_thresh, occupied_thresh))
 
         if negate:
             image = 255 - image
 
-        occupied_limit = int(round((1.0 - occupied_thresh) * 255.0))
-        free_limit = int(round((1.0 - free_thresh) * 255.0))
-
+        occupancy = (255.0 - image.astype(np.float32)) / 255.0
         grid = np.full(image.shape, -1, dtype=np.int16)
-        grid[image <= occupied_limit] = 100
-        grid[image >= free_limit] = 0
+        grid[occupancy > occupied_thresh] = 100
+        grid[occupancy < free_thresh] = 0
         grid = np.flipud(grid)
 
         msg = OccupancyGrid()

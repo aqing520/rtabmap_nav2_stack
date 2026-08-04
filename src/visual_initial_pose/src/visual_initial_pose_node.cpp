@@ -53,6 +53,9 @@ public:
       visual_pose_topic_, latched_qos);
     initialpose_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
       initialpose_topic_, latched_qos);
+    initialpose_sub_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+      initialpose_topic_, rclcpp::QoS(10).reliable(),
+      std::bind(&VisualInitialPoseNode::initialpose_callback, this, std::placeholders::_1));
     status_pub_ = create_publisher<std_msgs::msg::String>(status_topic_, latched_qos);
     success_pub_ = create_publisher<std_msgs::msg::Bool>(
       "/visual_initial_pose/success", latched_qos);
@@ -376,6 +379,73 @@ private:
     evaluate_result(msg->header.stamp);
   }
 
+  void initialpose_callback(
+    const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr msg)
+  {
+    if (
+      have_internal_initialpose_stamp_ &&
+      msg->header.stamp.sec == last_internal_initialpose_stamp_.sec &&
+      msg->header.stamp.nanosec == last_internal_initialpose_stamp_.nanosec)
+    {
+      return;
+    }
+
+    if (
+      state_ == State::ACTIVATING_COLLISION ||
+      state_ == State::ACTIVATING_NAVIGATION ||
+      state_ == State::COMPLETE)
+    {
+      RCLCPP_INFO(
+        get_logger(), "Ignoring external %s because Nav2 activation is already in progress or complete.",
+        initialpose_topic_.c_str());
+      return;
+    }
+
+    if (!msg->header.frame_id.empty() && msg->header.frame_id != map_frame_) {
+      RCLCPP_WARN(
+        get_logger(), "Ignoring external %s in frame \"%s\"; expected \"%s\".",
+        initialpose_topic_.c_str(), msg->header.frame_id.c_str(), map_frame_.c_str());
+      return;
+    }
+
+    accepted_pose_msg_ = *msg;
+    accepted_pose_msg_.header.frame_id = map_frame_;
+    accepted_pose_ =
+      rtabmap_conversions::transformFromPoseMsg(accepted_pose_msg_.pose.pose);
+    if (accepted_pose_.isNull()) {
+      RCLCPP_WARN(get_logger(), "Ignoring external %s with an invalid pose.", initialpose_topic_.c_str());
+      return;
+    }
+
+    if (flatten_to_2d_) {
+      float x, y, z, roll, pitch, yaw;
+      accepted_pose_.getTranslationAndEulerAngles(x, y, z, roll, pitch, yaw);
+      accepted_pose_ = rtabmap::Transform(x, y, 0.0f, 0.0f, 0.0f, yaw);
+      rtabmap_conversions::transformToPoseMsg(
+        accepted_pose_, accepted_pose_msg_.pose.pose);
+    }
+
+    initialpose_remaining_ = 0;
+    lifecycle_request_in_flight_ = false;
+    pose_published_at_ = std::chrono::steady_clock::now();
+    tf_confirmation_started_at_ = pose_published_at_;
+
+    visual_pose_pub_->publish(accepted_pose_msg_);
+    std_msgs::msg::Bool success_msg;
+    success_msg.data = true;
+    success_pub_->publish(success_msg);
+
+    publish_status(
+      "manual",
+      "received external /initialpose; waiting for map to base TF confirmation");
+    RCLCPP_INFO(
+      get_logger(), "External initial pose accepted: %s; waiting for TF confirmation.",
+      accepted_pose_.prettyPrint().c_str());
+
+    state_ = activate_nav2_on_success_ ?
+      State::WAITING_TF_CONFIRMATION : State::COMPLETE;
+  }
+
   void evaluate_result(const builtin_interfaces::msg::Time & stamp)
   {
     const auto & statistics = rtabmap_.getStatistics();
@@ -603,6 +673,8 @@ private:
       return;
     }
     accepted_pose_msg_.header.stamp = now();
+    last_internal_initialpose_stamp_ = accepted_pose_msg_.header.stamp;
+    have_internal_initialpose_stamp_ = true;
     initialpose_pub_->publish(accepted_pose_msg_);
     --initialpose_remaining_;
     next_initialpose_publish_at_ = std::chrono::steady_clock::now() +
@@ -814,6 +886,8 @@ private:
   tf2_ros::TransformListener tf_listener_;
 
   rclcpp::Subscription<rtabmap_msgs::msg::RGBDImage>::SharedPtr rgbd_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
+    initialpose_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
     visual_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
@@ -839,12 +913,14 @@ private:
   bool sensor_timeout_reported_{false};
   bool localization_timeout_reported_{false};
   bool lifecycle_request_in_flight_{false};
+  bool have_internal_initialpose_stamp_{false};
   int attempt_count_{0};
   int confirmed_node_id_{0};
   int confirmation_count_{0};
   int initialpose_remaining_{0};
   std::string last_status_;
   geometry_msgs::msg::PoseWithCovarianceStamped accepted_pose_msg_;
+  builtin_interfaces::msg::Time last_internal_initialpose_stamp_;
   rtabmap::Transform accepted_pose_;
 
   std::string database_path_;

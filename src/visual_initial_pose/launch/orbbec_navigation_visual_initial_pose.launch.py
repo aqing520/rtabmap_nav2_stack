@@ -16,6 +16,8 @@ def generate_launch_description():
     database_path = LaunchConfiguration('database_path')
     use_sim_time = LaunchConfiguration('use_sim_time')
     allow_fallback = LaunchConfiguration('allow_last_pose_fallback')
+    use_edited_map = LaunchConfiguration('use_edited_map')
+    edited_map_yaml = LaunchConfiguration('edited_map_yaml')
 
     args = [
         DeclareLaunchArgument('database_path', default_value='./rtabmap_orbbec.db'),
@@ -25,6 +27,16 @@ def generate_launch_description():
         DeclareLaunchArgument('start_camera', default_value='true'),
         DeclareLaunchArgument('enable_rviz', default_value='true'),
         DeclareLaunchArgument('enable_rtabmap_viz', default_value='false'),
+        DeclareLaunchArgument(
+            'use_edited_map',
+            default_value='false',
+            description='Load an offline-edited static map for Nav2.',
+        ),
+        DeclareLaunchArgument(
+            'edited_map_yaml',
+            default_value='/data/maps/site_a/map.yaml',
+            description='Offline-edited map YAML loaded when use_edited_map is true.',
+        ),
         DeclareLaunchArgument('allow_last_pose_fallback', default_value='false'),
         DeclareLaunchArgument('min_hypothesis', default_value='0.08'),
         DeclareLaunchArgument('min_visual_inliers', default_value='10'),
@@ -45,6 +57,8 @@ def generate_launch_description():
             'database_path': database_path,
             'enable_rviz': LaunchConfiguration('enable_rviz'),
             'enable_rtabmap_viz': LaunchConfiguration('enable_rtabmap_viz'),
+            'use_edited_map': use_edited_map,
+            'edited_map_yaml': edited_map_yaml,
             'autostart': 'false',
             'enable_startup_localization_guard': 'false',
         }.items(),

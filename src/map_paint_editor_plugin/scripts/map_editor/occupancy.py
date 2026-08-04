@@ -21,15 +21,6 @@ def msg_to_grid(msg: OccupancyGrid) -> np.ndarray:
     return np.array(msg.data, dtype=np.int16).reshape((msg.info.height, msg.info.width)).copy()
 
 
-def grid_to_msg(template: OccupancyGrid, grid: np.ndarray, stamp) -> OccupancyGrid:
-    msg = OccupancyGrid()
-    msg.header = template.header
-    msg.header.stamp = stamp
-    msg.info = template.info
-    msg.data = grid.astype(np.int8).reshape(-1).tolist()
-    return msg
-
-
 def grid_to_pgm_image(grid: np.ndarray) -> np.ndarray:
     image = np.full(grid.shape, 205, dtype=np.uint8)
     image[grid >= 65] = 0

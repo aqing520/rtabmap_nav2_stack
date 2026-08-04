@@ -14,17 +14,71 @@ Usage:
 """
 
 import os
+from datetime import datetime
+from pathlib import Path
+import time
 
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, IncludeLaunchDescription,
-    SetEnvironmentVariable,
+    LogInfo, OpaqueFunction, SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def record_mapping_session(context):
+    database_path = Path(
+        LaunchConfiguration('database_path').perform(context)
+    ).expanduser()
+    if not database_path.is_absolute():
+        database_path = (Path.cwd() / database_path).resolve()
+    else:
+        database_path = database_path.resolve()
+
+    marker_path = Path.home() / '.ros' / 'last_rtabmap_mapping_session'
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(
+        'database_path=%s\n'
+        'session_started_epoch=%d\n'
+        'launch_file=fastlio_mapping.launch.py\n'
+        % (database_path, int(time.time())),
+        encoding='utf-8',
+    )
+
+    backup_messages = []
+    delete_old_database = (
+        LaunchConfiguration('delete_db_on_start').perform(context).lower()
+        == 'true'
+    )
+    if delete_old_database:
+        backup_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        for suffix in ('.yaml', '.pgm'):
+            old_map = database_path.parent / ('map' + suffix)
+            if old_map.exists():
+                backup = database_path.parent / (
+                    'map%s.before_mapping_%s.bak' % (suffix, backup_stamp)
+                )
+                old_map.replace(backup)
+                backup_messages.append('%s -> %s' % (old_map, backup))
+
+    messages = [
+        LogInfo(msg='[mapping-session] RTAB-Map database: %s' % database_path),
+        LogInfo(msg='[mapping-session] Session marker: %s' % marker_path),
+    ]
+    if backup_messages:
+        messages.append(
+            LogInfo(
+                msg=(
+                    '[mapping-session] Previous exported map moved aside: '
+                    + '; '.join(backup_messages)
+                )
+            )
+        )
+    return messages
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -213,7 +267,8 @@ def generate_launch_description() -> LaunchDescription:
     
     for arg in declare_args:
         ld.add_action(arg)
-        
+
+    ld.add_action(OpaqueFunction(function=record_mapping_session))
     ld.add_action(base_tf)
     ld.add_action(livox_tf)
     ld.add_action(livox_launch)

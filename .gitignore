@@ -68,3 +68,6 @@ third_party/rtabmap-0.23.4/data/check-108.pdf
 
 # Upstream Scan Context demos/datasets; the ROS2 package keeps only needed sources.
 src/scancontext-main/
+
+
+pgm_map/

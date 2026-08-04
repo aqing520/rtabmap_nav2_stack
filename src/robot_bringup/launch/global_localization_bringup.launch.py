@@ -47,7 +47,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument(
             'nav2_controller',
-            default_value='dwb',
+            default_value='cuda_mppi',
             description='Nav2 local controller: dwb | mppi | cuda_mppi',
         ),
         DeclareLaunchArgument(

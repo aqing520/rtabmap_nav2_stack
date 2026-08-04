@@ -34,16 +34,11 @@ STVL 相比默认 VoxelLayer 的核心优势是增加了时间维度。障碍 vo
 涉及文件：
 
 - `src/robot_bringup/config/nav2_common.yaml`
-- `src/robot_bringup/config/nav2_forbidden_area.yaml`
 
 全局 costmap 分层调整为：
 
 ```yaml
-# nav2_common.yaml
 plugins: ['static_layer', 'stvl_layer', 'inflation_layer']
-
-# nav2_forbidden_area.yaml
-plugins: ['static_layer', 'stvl_layer', 'forbidden_area_layer', 'inflation_layer']
 ```
 
 局部 costmap 分层调整为：
@@ -183,7 +178,7 @@ voxel_decay: 5.0
 
 ## 9. 回退方式
 
-如果 STVL 运行效果不满足预期，可将局部 costmap 插件恢复为原 `nav2_costmap_2d::VoxelLayer`，并恢复 `mark_cloud` / `clear_cloud` 配置。全局 costmap 可移除 `stvl_layer`，恢复为仅静态地图、禁行区和膨胀层，或恢复旧的 `nav2_costmap_2d::VoxelLayer` 动态障碍层。
+如果 STVL 运行效果不满足预期，可将局部 costmap 插件恢复为原 `nav2_costmap_2d::VoxelLayer`，并恢复 `mark_cloud` / `clear_cloud` 配置。全局 costmap 可移除 `stvl_layer`，恢复为静态地图和膨胀层，或恢复旧的 `nav2_costmap_2d::VoxelLayer` 动态障碍层。
 
 ## 10. 结论
 

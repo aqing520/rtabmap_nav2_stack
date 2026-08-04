@@ -3,7 +3,7 @@
 <package format="3">
   <name>map_paint_editor_plugin</name>
   <version>0.1.0</version>
-  <description>Portable OpenCV-based ROS 2 occupancy-grid map editor.</description>
+  <description>Offline PGM/YAML occupancy-grid map editor.</description>
   <maintainer email="todo@todo.com">wheeltec</maintainer>
   <license>Apache-2.0</license>
 
@@ -13,7 +13,6 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-pyqt5</exec_depend>

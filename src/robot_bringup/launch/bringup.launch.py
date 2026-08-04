@@ -82,15 +82,6 @@ def generate_launch_description() -> LaunchDescription:
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     use_edited_map = LaunchConfiguration('use_edited_map')
     edited_map_yaml = LaunchConfiguration('edited_map_yaml')
-    enable_forbidden_area = LaunchConfiguration('enable_forbidden_area')
-    start_map_paint_editor = LaunchConfiguration('start_map_paint_editor')
-    map_editor_load_yaml_path = LaunchConfiguration('map_editor_load_yaml_path')
-    map_editor_input_topic = LaunchConfiguration('map_editor_input_topic')
-    map_editor_output_topic = LaunchConfiguration('map_editor_output_topic')
-    map_editor_save_yaml_path = LaunchConfiguration('map_editor_save_yaml_path')
-    map_editor_brush_radius_cells = LaunchConfiguration('map_editor_brush_radius_cells')
-    map_editor_reissue_goal_on_publish = LaunchConfiguration(
-        'map_editor_reissue_goal_on_publish')
     start_multi_waypoint_routes = LaunchConfiguration('start_multi_waypoint_routes')
     waypoint_map_id = LaunchConfiguration('waypoint_map_id')
     waypoint_map_frame_id = LaunchConfiguration('waypoint_map_frame_id')
@@ -107,11 +98,15 @@ def generate_launch_description() -> LaunchDescription:
             PythonExpression([
                 "'nav2_cuda_mppi.yaml' if '", nav2_controller, "' == 'cuda_mppi' "
                 "else 'nav2_mppi.yaml' if '", nav2_controller, "' == 'mppi' "
-                "else 'nav2_forbidden_area.yaml' if '", enable_forbidden_area,
-                "' == 'true' else 'nav2_dwb.yaml'"
+                "else 'nav2_dwb.yaml'"
             ]),
         ]),
         "'"
+    ])
+    effective_edited_map_yaml = PythonExpression([
+        "'", edited_map_yaml, "' if '", edited_map_yaml,
+        "' else __import__('os').path.join(__import__('os').path.dirname('",
+        database_path, "'), 'map.yaml')"
     ])
 
     declare_args = [
@@ -134,51 +129,23 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
         DeclareLaunchArgument(
             'use_edited_map',
-            default_value='false',
-            description='Publish /map from edited_map_yaml instead of RTAB-Map during navigation.',
+            default_value='true',
+            description=(
+                'Publish /map from the exported offline map instead of '
+                'RTAB-Map during navigation.'
+            ),
         ),
         DeclareLaunchArgument(
             'edited_map_yaml',
-            default_value='/data/maps/site_a/map.yaml',
-            description='Static map YAML used when use_edited_map is true.',
+            default_value='',
+            description=(
+                'Static map YAML used when use_edited_map is true. An empty '
+                'value selects map.yaml next to database_path.'
+            ),
         ),
         DeclareLaunchArgument('rtabmap_args', default_value=DEFAULT_RTABMAP_ARGS),
-        DeclareLaunchArgument('nav2_controller', default_value='dwb', description='Nav2 local controller: dwb | mppi | cuda_mppi'),
+        DeclareLaunchArgument('nav2_controller', default_value='cuda_mppi', description='Nav2 local controller: dwb | mppi | cuda_mppi'),
         DeclareLaunchArgument('nav2_params_file', default_value='', description='Optional Nav2 params file. Overrides nav2_controller when set.'),
-        DeclareLaunchArgument(
-            'enable_forbidden_area',
-            default_value='false',
-            description='Use the DWB Nav2 configuration with the global forbidden-area layer.',
-        ),
-        DeclareLaunchArgument(
-            'start_map_paint_editor',
-            default_value='false',
-            description='Start the occupancy-grid map editor.',
-        ),
-        DeclareLaunchArgument(
-            'map_editor_load_yaml_path',
-            default_value='/data/maps/site_a/map.yaml',
-        ),
-        DeclareLaunchArgument(
-            'map_editor_input_topic',
-            default_value='',
-            description='Optional OccupancyGrid input; empty loads the YAML map.',
-        ),
-        DeclareLaunchArgument(
-            'map_editor_output_topic',
-            default_value='/map_edited',
-            description='Use /map for online Nav2 static-layer editing.',
-        ),
-        DeclareLaunchArgument(
-            'map_editor_save_yaml_path',
-            default_value='/data/maps/site_a/map.yaml',
-        ),
-        DeclareLaunchArgument('map_editor_brush_radius_cells', default_value='5'),
-        DeclareLaunchArgument(
-            'map_editor_reissue_goal_on_publish',
-            default_value='true',
-            description='Republish the latest goal after publishing an edited /map.',
-        ),
         DeclareLaunchArgument('start_multi_waypoint_routes', default_value='false', description='Start RViz clicked-point waypoint manager'),
         DeclareLaunchArgument('waypoint_map_id', default_value='site_a', description='Map name/id attached to RViz waypoint collection'),
         DeclareLaunchArgument('waypoint_map_frame_id', default_value='map', description='Required frame_id for RViz clicked points'),
@@ -349,7 +316,7 @@ def generate_launch_description() -> LaunchDescription:
         ])),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'yaml_filename': edited_map_yaml,
+            'yaml_filename': effective_edited_map_yaml,
         }],
     )
 
@@ -382,33 +349,6 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(show_rviz),
         arguments=['-d', nav2_rviz_config],
     )
-    map_paint_editor_node = Node(
-        package='map_paint_editor_plugin',
-        executable='map_paint_editor.py',
-        name='map_paint_editor',
-        output='screen',
-        condition=IfCondition(start_map_paint_editor),
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'load_yaml_path': map_editor_load_yaml_path,
-            'input_topic': map_editor_input_topic,
-            'output_topic': map_editor_output_topic,
-            'save_yaml_path': map_editor_save_yaml_path,
-            'brush_radius_cells': map_editor_brush_radius_cells,
-            'reissue_goal_on_publish': map_editor_reissue_goal_on_publish,
-            'goal_topic': '/goal_pose',
-        }],
-    )
-    forbidden_area_visualizer = Node(
-        package='forbidden_area_layer',
-        executable='forbidden_area_visualizer.py',
-        name='forbidden_area_visualizer',
-        output='screen',
-        condition=IfCondition(PythonExpression([
-            "'", mode, "' == 'navigation' and '", enable_forbidden_area, "' == 'true'"
-        ])),
-    )
-
     # ── 6. Nav2 ──
     # Remap /cmd_vel → /cmd_vel_nav so collision_monitor can intercept before the hardware.
     nav2_launch = GroupAction(
@@ -530,9 +470,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(rtabmap_bridge)
     ld.add_action(edited_map_server)
     ld.add_action(edited_map_lifecycle)
-    ld.add_action(map_paint_editor_node)
     ld.add_action(rviz_node)
-    ld.add_action(forbidden_area_visualizer)
     ld.add_action(nav2_launch)
     ld.add_action(collision_monitor)
     ld.add_action(collision_monitor_lifecycle)

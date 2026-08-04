@@ -77,7 +77,6 @@ class MapGraphicsView(QtWidgets.QGraphicsView):
 
         if self._painting and event.button() in (QtCore.Qt.LeftButton, QtCore.Qt.RightButton):
             self._painting = False
-            self.canvas.on_publish()
             event.accept()
             return
 
@@ -125,7 +124,6 @@ class MapEditorCanvas(QtWidgets.QMainWindow):
         initial_zoom: float,
         max_zoom: float,
         on_paint: Callable[[int, int, int], None],
-        on_publish: Callable[[], None],
         on_save: Callable[[], None],
         on_quit: Callable[[], None],
     ):
@@ -137,7 +135,6 @@ class MapEditorCanvas(QtWidgets.QMainWindow):
         self.zoom = max(0.1, float(initial_zoom))
         self.max_zoom = max(self.zoom, float(max_zoom))
         self.on_paint = on_paint
-        self.on_publish = on_publish
         self.on_save = on_save
         self.on_quit = on_quit
 
@@ -196,8 +193,8 @@ class MapEditorCanvas(QtWidgets.QMainWindow):
     def paint_at_view_pos(self, pos, value: int) -> None:
         self.on_paint(pos.x(), pos.y(), value)
 
-    def show_waiting(self, input_topic: str) -> None:
-        self.status.setText('Waiting for map: %s' % input_topic)
+    def show_waiting(self, source_path: str) -> None:
+        self.status.setText('Waiting for map file: %s' % source_path)
         QtWidgets.QApplication.processEvents()
 
     def show_grid(self, grid, dirty: bool, save_path: str) -> None:

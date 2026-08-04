@@ -5,7 +5,6 @@
 - RViz 中使用 `Nav2 Goal` 或 `2D Goal Pose` 给目标点后，机器人不动。
 - RViz 中没有显示全局路径 `Path`。
 - 终端没有明显报错，但 Nav2 没有规划结果。
-- 加入禁行区后，某些目标点突然无法规划。
 
 本文按现场最快排查顺序整理。建议不要一上来改参数，先判断是显示问题、Nav2 未激活、TF/地图问题，还是目标点确实不可达。
 
@@ -126,9 +125,9 @@ ros2 topic hz /global_costmap/costmap
 
 - 检查 `global_costmap` lifecycle 是否 active。
 - 检查 Nav2 参数文件是否加载成功。
-- 检查 costmap 插件是否加载失败，尤其是启用禁行区时的 `forbidden_area_layer::ForbiddenAreaLayer`。
+- 检查 static layer、STVL 或 inflation layer 是否加载失败。
 
-## 5. 检查目标点是否落在障碍物、未知区域或禁行区内
+## 5. 检查目标点是否落在障碍物或未知区域内
 
 本项目 `nav2_common.yaml` 中全局规划器配置为：
 
@@ -141,34 +140,9 @@ allow_unknown: false
 现场处理：
 
 1. 在 RViz 显示 `/global_costmap/costmap`。
-2. 目标点不要点在黑色未知区、墙体、障碍物膨胀区或禁行区内。
+2. 目标点不要点在黑色未知区、墙体或障碍物膨胀区内。
 3. 先点一个离机器人 1-2 米、明显在可通行白色区域内的目标点做验证。
 4. 如果这个近点可以出 Path，说明 Nav2 正常，远点不可达多半是地图/代价地图阻断。
-
-如果启用了禁行区参数：
-
-```bash
-ros2 launch robot_bringup bringup.launch.py \
-  mode:=navigation \
-  nav2_params_file:=/home/wheeltec/xz/rtabmap_nav2_stack/install/robot_bringup/share/robot_bringup/config/nav2_forbidden_area.yaml \
-  enable_rviz:=true
-```
-
-需要额外确认目标点没有落在禁行区多边形内，路径也没有被禁行区完全切断。
-
-查看禁行区服务是否存在：
-
-```bash
-ros2 service list | grep forbidden
-```
-
-如果禁行区配置启用后 Nav2 启动失败，优先检查 `forbidden_area_layer` 是否已编译并 source：
-
-```bash
-source /opt/ros/humble/setup.bash
-source /home/wheeltec/xz/rtabmap_nav2_stack/install/setup.bash
-ros2 pkg prefix forbidden_area_layer
-```
 
 ## 6. 清除代价地图后重新给目标点
 
@@ -222,8 +196,7 @@ ros2 topic echo /rosout | grep -E "planner_server|bt_navigator|global_costmap|Na
 | `tf2_echo map base_footprint` 失败 | 修复 RTAB-Map/FAST-LIO TF 链路 |
 | `/map` 没数据 | 检查 `database_path` 和 RTAB-Map 启动 |
 | `/global_costmap/costmap` 没数据 | 检查 costmap lifecycle 和插件加载 |
-| 近点能规划，远点不能规划 | 地图未知区、障碍物或禁行区阻断 |
-| 启用禁行区后不能规划 | 检查目标点是否在禁行区内，检查 `forbidden_area_layer` 是否编译并 source |
+| 近点能规划，远点不能规划 | 地图未知区或障碍物阻断 |
 | 清图后恢复 | 点云残留或动态障碍物残留 |
 
 ## 9. 推荐现场恢复流程
@@ -244,4 +217,3 @@ ros2 service call /local_costmap/clear_entirely_local_costmap nav2_msgs/srv/Clea
 ```
 
 然后在 RViz 中先给一个近距离、空旷区域目标点。如果近点有 Path，再逐步测试远点和禁行区边界。
-

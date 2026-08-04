@@ -1,5 +1,0 @@
-<library path="libforbidden_area_layer_plugin">
-  <class name="forbidden_area_layer::ForbiddenAreaLayer" type="forbidden_area_layer::ForbiddenAreaLayer" base_class_type="nav2_costmap_2d::Layer">
-    <description>Forbidden Area Layer for Nav2 costmap</description>
-  </class>
-</library>

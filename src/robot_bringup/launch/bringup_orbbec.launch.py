@@ -36,6 +36,8 @@ def generate_launch_description() -> LaunchDescription:
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     database_path = LaunchConfiguration('database_path')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
+    use_edited_map = LaunchConfiguration('use_edited_map')
+    edited_map_yaml = LaunchConfiguration('edited_map_yaml')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
     nav2_bringup_share = FindPackageShare('nav2_bringup')
@@ -53,7 +55,11 @@ def generate_launch_description() -> LaunchDescription:
             "' if '", enable_startup_localization_guard, "' == 'true' else ''"
         ]),
     ]
-
+    effective_edited_map_yaml = PythonExpression([
+        "'", edited_map_yaml, "' if '", edited_map_yaml,
+        "' else __import__('os').path.join(__import__('os').path.dirname('",
+        database_path, "'), 'pgm_map', 'map.yaml')"
+    ])
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
         DeclareLaunchArgument('mode', default_value='navigation', description='mapping | localization | navigation'),
@@ -136,6 +142,22 @@ def generate_launch_description() -> LaunchDescription:
         # the Nav2 lifecycle manager aborts before the global costmap is
         # activated.  Make sure to source cuda_robotics_ws before launching.
         DeclareLaunchArgument('nav2_params_file', default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_cuda_mppi.yaml'])),
+        DeclareLaunchArgument(
+            'use_edited_map',
+            default_value='true',
+            description=(
+                'During navigation, publish /map from the exported offline map '
+                'and move the RTAB-Map occupancy-grid output to /rtabmap/map_raw.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'edited_map_yaml',
+            default_value='',
+            description=(
+                'Static map YAML used when use_edited_map is true. An empty '
+                'value selects pgm_map/map.yaml next to database_path.'
+            ),
+        ),
         DeclareLaunchArgument('rtabmap_frame_id', default_value='base_footprint'),
         DeclareLaunchArgument('rtabmap_map_frame', default_value='map'),
         DeclareLaunchArgument('rtabmap_odom_topic', default_value='/Odometry'),
@@ -341,6 +363,10 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     # ── 5. RTAB-Map (SLAM / Localization) ──
+    rtabmap_map_topic = PythonExpression([
+        "'/rtabmap/map_raw' if '", mode, "' == 'navigation' and '",
+        use_edited_map, "' == 'true' else 'map'"
+    ])
     rtabmap_bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([robot_bringup_share, 'launch', 'rtabmap_bridge.launch.py'])),
         launch_arguments={
@@ -353,6 +379,7 @@ def generate_launch_description() -> LaunchDescription:
             'rtabmap_args': effective_rtabmap_args,
             'frame_id': LaunchConfiguration('rtabmap_frame_id'),
             'map_frame_id': LaunchConfiguration('rtabmap_map_frame'),
+            'map_topic': rtabmap_map_topic,
             'odom_topic': LaunchConfiguration('rtabmap_odom_topic'),
             'imu_topic': LaunchConfiguration('imu_topic'),
             'gps_topic': LaunchConfiguration('gps_fix_topic'),
@@ -370,6 +397,39 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
+    # Keep the edited map server independent from the Nav2 activation gate.
+    # The visual-initial-pose workflow intentionally starts Nav2 with
+    # autostart=false, but /map must already be available when Nav2 is
+    # activated after visual localization succeeds.
+    edited_map_server = Node(
+        package='nav2_map_server',
+        executable='map_server',
+        name='map_server',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '", use_edited_map, "' == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'yaml_filename': effective_edited_map_yaml,
+        }],
+    )
+
+    edited_map_lifecycle = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_edited_map',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", mode, "' == 'navigation' and '", use_edited_map, "' == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': True,
+            'node_names': ['map_server'],
+        }],
+    )
+
     # ── 5b. RViz with Nav2 navigation config ──
     nav2_rviz_config = PathJoinSubstitution([robot_bringup_share, 'config', 'nav2_navigation.rviz'])
     rviz_node = Node(
@@ -380,7 +440,6 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(enable_rviz),
         arguments=['-d', nav2_rviz_config],
     )
-
     # ── 5c. Startup localization gate ──
     # RTAB-Map keeps running as the localization backend. This one-shot
     # supervisor only delays Nav2 activation until RTAB-Map accepts a global
@@ -536,6 +595,8 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(fast_lio_launch)
     ld.add_action(navsat_transform)
     ld.add_action(rtabmap_bridge)
+    ld.add_action(edited_map_server)
+    ld.add_action(edited_map_lifecycle)
     ld.add_action(rviz_node)
     ld.add_action(startup_localization_guard)
     ld.add_action(nav2_launch)

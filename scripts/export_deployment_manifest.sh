@@ -78,7 +78,6 @@ section critical_config_sha256
 config_files=(
   src/robot_bringup/config/nav2_navigation.rviz
   src/robot_bringup/config/nav2_common.yaml
-  src/robot_bringup/config/nav2_forbidden_area.yaml
   src/robot_bringup/config/navigate_to_pose_clear_costmaps_on_goal_start.xml
   src/FAST_LIO_ROS2/config/mid360.yaml
   src/livox_ros_driver2/config/MID360_config.json
