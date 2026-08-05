@@ -1,9 +1,0 @@
-# AprilTag 尺寸：黑白交界边长（米），非外轮廓；见 apriltag_ros README
-# https://github.com/AprilRobotics/apriltag/wiki/AprilTag-User-Guide#pose-estimation
-standalone_tags:
-  [
-    {id: 88, size: 0.184, name: 'charging_station'},
-  ]
-tag_bundles:
-  [
-  ]
