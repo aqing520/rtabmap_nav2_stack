@@ -10,18 +10,33 @@ Assumptions:
 
 import math
 import os
+from pathlib import Path
 
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource, PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from nav2_common.launch import RewrittenYaml
 from launch_ros.actions import Node, SetRemap
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
+def _workspace_root(package_name: str) -> Path:
+    """Return the colcon workspace containing an installed package."""
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def generate_launch_description() -> LaunchDescription:
+    workspace_root = _workspace_root('robot_bringup')
+
     namespace = LaunchConfiguration('namespace')
     mode = LaunchConfiguration('mode')
     sensor_profile = LaunchConfiguration('sensor_profile')
@@ -35,6 +50,10 @@ def generate_launch_description() -> LaunchDescription:
     enable_rtabmap_viz = LaunchConfiguration('enable_rtabmap_viz')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     database_path = LaunchConfiguration('database_path')
+    effective_database_path = PathJoinSubstitution([
+        str(workspace_root),
+        database_path,
+    ])
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     use_edited_map = LaunchConfiguration('use_edited_map')
     edited_map_yaml = LaunchConfiguration('edited_map_yaml')
@@ -58,8 +77,20 @@ def generate_launch_description() -> LaunchDescription:
     effective_edited_map_yaml = PythonExpression([
         "'", edited_map_yaml, "' if '", edited_map_yaml,
         "' else __import__('os').path.join(__import__('os').path.dirname('",
-        database_path, "'), 'pgm_map', 'map.yaml')"
+        effective_database_path, "'), 'pgm_map', 'map.yaml')"
     ])
+    bt_xml_path = PathJoinSubstitution([
+        robot_bringup_share,
+        'config',
+        'navigate_to_pose_clear_costmaps_on_goal_start.xml',
+    ])
+    configured_nav2_params = RewrittenYaml(
+        source_file=nav2_params_file,
+        param_rewrites={
+            'default_nav_to_pose_bt_xml': bt_xml_path,
+        },
+        convert_types=True,
+    )
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
         DeclareLaunchArgument('mode', default_value='navigation', description='mapping | localization | navigation'),
@@ -122,7 +153,11 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_rviz', default_value='true', description='Launch RViz with Nav2 navigation config'),
         DeclareLaunchArgument('enable_rtabmap_viz', default_value='false', description='Launch the RTAB-Map visualization window'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
-        DeclareLaunchArgument('database_path', default_value='./rtabmap_orbbec.db'),
+        DeclareLaunchArgument(
+            'database_path',
+            default_value='rtabmap_orbbec.db',
+            description='RTAB-Map database under the current workspace by default.',
+        ),
         DeclareLaunchArgument('rtabmap_args', default_value=
             "--Reg/Strategy 2 \
             --Vis/MaxFeatures 800 \
@@ -375,7 +410,7 @@ def generate_launch_description() -> LaunchDescription:
             'sensor_profile': sensor_profile,
             'enable_gps': enable_gps,
             'localization': PythonExpression(["'true' if '", mode, "' != 'mapping' else 'false'"]),
-            'database_path': database_path,
+            'database_path': effective_database_path,
             'rtabmap_args': effective_rtabmap_args,
             'frame_id': LaunchConfiguration('rtabmap_frame_id'),
             'map_frame_id': LaunchConfiguration('rtabmap_map_frame'),
@@ -500,7 +535,7 @@ def generate_launch_description() -> LaunchDescription:
                     'namespace': namespace,
                     'use_sim_time': use_sim_time,
                     'autostart': effective_autostart,
-                    'params_file': nav2_params_file,
+                    'params_file': configured_nav2_params,
                     'use_composition': 'False',
                     'use_respawn': 'False',
                     'log_level': 'info',

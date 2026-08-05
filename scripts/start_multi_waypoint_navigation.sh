@@ -3,7 +3,7 @@
 #
 # Usage:
 #   scripts/start_multi_waypoint_navigation.sh
-#   scripts/start_multi_waypoint_navigation.sh --map site_workspace --db /data/maps/site_workspace/rtabmap.db --rviz
+#   scripts/start_multi_waypoint_navigation.sh --map site_workspace --db maps/site_workspace/rtabmap.db --rviz
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 MAP_ID="${MAP_ID:-site_workspace}"
 MAP_FRAME_ID="${MAP_FRAME_ID:-map}"
-DATABASE_PATH="${DATABASE_PATH:-/data/maps/${MAP_ID}/rtabmap.db}"
+DATABASE_PATH="${DATABASE_PATH:-$WS_DIR/rtabmap_orbbec.db}"
 ENABLE_RVIZ="${ENABLE_RVIZ:-true}"
 MODE="${MODE:-navigation}"
 
@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --map)
             MAP_ID="$2"
-            DATABASE_PATH="/data/maps/${MAP_ID}/rtabmap.db"
+            DATABASE_PATH="$WS_DIR/maps/${MAP_ID}/rtabmap.db"
             shift 2
             ;;
         --db)

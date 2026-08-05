@@ -176,8 +176,15 @@ def write_pcd_binary(filename, points, fields=None):
 
 
 def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "/data/maps/site_a/rtabmap.db"
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cloud_map")
+    workspace_root = Path(__file__).resolve().parents[1]
+    db_path = (
+        sys.argv[1] if len(sys.argv) > 1
+        else str(workspace_root / "rtabmap_orbbec.db")
+    )
+    output_dir = (
+        sys.argv[2] if len(sys.argv) > 2
+        else str(workspace_root / "cloud_map")
+    )
     os.makedirs(output_dir, exist_ok=True)
 
     if not os.path.isfile(db_path):

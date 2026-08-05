@@ -18,10 +18,11 @@ from datetime import datetime
 from pathlib import Path
 import time
 
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, IncludeLaunchDescription,
-    LogInfo, OpaqueFunction, SetEnvironmentVariable,
+    LogInfo, OpaqueFunction, SetEnvironmentVariable, SetLaunchConfiguration,
 )
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -30,12 +31,23 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+def _workspace_root(package_name: str) -> Path:
+    """Return the colcon workspace containing an installed package."""
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def record_mapping_session(context):
+    workspace_root = _workspace_root('robot_bringup')
     database_path = Path(
         LaunchConfiguration('database_path').perform(context)
     ).expanduser()
     if not database_path.is_absolute():
-        database_path = (Path.cwd() / database_path).resolve()
+        database_path = (workspace_root / database_path).resolve()
     else:
         database_path = database_path.resolve()
 
@@ -66,6 +78,7 @@ def record_mapping_session(context):
                 backup_messages.append('%s -> %s' % (old_map, backup))
 
     messages = [
+        SetLaunchConfiguration('database_path', str(database_path)),
         LogInfo(msg='[mapping-session] RTAB-Map database: %s' % database_path),
         LogInfo(msg='[mapping-session] Session marker: %s' % marker_path),
     ]
@@ -134,8 +147,11 @@ def generate_launch_description() -> LaunchDescription:
             default_value='/unused_imu',
             description='Optional RTAB-Map IMU topic. FAST-LIO still uses /livox/imu from its own config.',
         ),
-        DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db',
-                              description='Path to save/load the RTAB-Map database'),
+        DeclareLaunchArgument(
+            'database_path',
+            default_value='rtabmap_orbbec.db',
+            description='Path to save/load the RTAB-Map database',
+        ),
         DeclareLaunchArgument(
             'fast_lio_config_file',
             default_value='mid360_save.yaml',

@@ -11,7 +11,7 @@
 #
 # 用法:
 #   ./scripts/start_with_global_localization.sh
-#   ./scripts/start_with_global_localization.sh --db /data/maps/site_a/rtabmap.db
+#   ./scripts/start_with_global_localization.sh --db rtabmap_orbbec.db
 #   ./scripts/start_with_global_localization.sh --engine BBS
 
 set -eo pipefail
@@ -20,7 +20,7 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-DATABASE_PATH="${DATABASE_PATH:-/data/maps/site_a/rtabmap.db}"
+DATABASE_PATH="${DATABASE_PATH:-$WS_DIR/rtabmap_orbbec.db}"
 ENGINE="${ENGINE:-FPFH_RANSAC}"
 BRINGUP_MODE="${BRINGUP_MODE:-navigation}"
 ENABLE_RVIZ="${ENABLE_RVIZ:-false}"

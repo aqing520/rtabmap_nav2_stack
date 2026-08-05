@@ -7,7 +7,9 @@ Suggested location:
 This wrapper keeps RTAB-Map focused on global SLAM, loop closure, mapping, and
 localization, while local continuous odometry comes from FAST-LIO.
 """
+from pathlib import Path
 
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -17,7 +19,22 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+def _workspace_root(package_name: str) -> Path:
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def generate_launch_description() -> LaunchDescription:
+    workspace_root = _workspace_root('robot_bringup')
+    database_path = LaunchConfiguration('database_path')
+    effective_database_path = PathJoinSubstitution([
+        str(workspace_root),
+        database_path,
+    ])
     rtabmap_launch_share = FindPackageShare('rtabmap_launch')
 
     declare_args = [
@@ -26,7 +43,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('sensor_profile', default_value='lidar_only', description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
         DeclareLaunchArgument('enable_gps', default_value='false'),
         DeclareLaunchArgument('localization', default_value='true', description='false=mapping, true=localization/navigation'),
-        DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
+        DeclareLaunchArgument(
+            'database_path',
+            default_value='rtabmap_orbbec.db',
+        ),
         DeclareLaunchArgument(
             'rtabmap_args',
             default_value=(
@@ -80,7 +100,7 @@ def generate_launch_description() -> LaunchDescription:
             'namespace': LaunchConfiguration('namespace'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'localization': LaunchConfiguration('localization'),
-            'database_path': LaunchConfiguration('database_path'),
+            'database_path': effective_database_path,
             'frame_id': LaunchConfiguration('frame_id'),
             'map_frame_id': LaunchConfiguration('map_frame_id'),
             'map_topic': LaunchConfiguration('map_topic'),

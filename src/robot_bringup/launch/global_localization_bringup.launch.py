@@ -12,7 +12,9 @@ Usage（通常由 start_with_global_localization.sh 调用）:
   ros2 launch robot_bringup global_localization_bringup.launch.py
   ros2 launch robot_bringup global_localization_bringup.launch.py enable_rviz:=true
 """
+from pathlib import Path
 
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -21,8 +23,23 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+def _workspace_root(package_name: str) -> Path:
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def generate_launch_description() -> LaunchDescription:
+    workspace_root = _workspace_root('robot_bringup')
+
     database_path = LaunchConfiguration('database_path')
+    effective_database_path = PathJoinSubstitution([
+        str(workspace_root),
+        database_path,
+    ])
     enable_rviz   = LaunchConfiguration('enable_rviz')
     mode          = LaunchConfiguration('mode')
     nav2_controller = LaunchConfiguration('nav2_controller')
@@ -34,7 +51,7 @@ def generate_launch_description() -> LaunchDescription:
     declare_args = [
         DeclareLaunchArgument(
             'database_path',
-            default_value='/data/maps/site_a/rtabmap.db',
+            default_value='rtabmap_orbbec.db',
         ),
         DeclareLaunchArgument(
             'mode',
@@ -69,7 +86,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             'mode':          mode,
-            'database_path': database_path,
+            'database_path': effective_database_path,
             'enable_rviz':   enable_rviz,
             'autostart':     'false',
             'nav2_controller': nav2_controller,

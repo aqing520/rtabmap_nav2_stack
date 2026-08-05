@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
+
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -9,18 +12,40 @@ from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
+def _workspace_root(package_name: str) -> Path:
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def generate_launch_description():
+    workspace_root = _workspace_root('visual_initial_pose')
+
     robot_share = FindPackageShare('robot_bringup')
     visual_share = FindPackageShare('visual_initial_pose')
 
     database_path = LaunchConfiguration('database_path')
+    effective_database_path = PathJoinSubstitution([
+        str(workspace_root),
+        database_path,
+    ])
     use_sim_time = LaunchConfiguration('use_sim_time')
     allow_fallback = LaunchConfiguration('allow_last_pose_fallback')
     use_edited_map = LaunchConfiguration('use_edited_map')
     edited_map_yaml = LaunchConfiguration('edited_map_yaml')
+    effective_edited_map_yaml = PathJoinSubstitution([
+        str(workspace_root),
+        edited_map_yaml,
+    ])
 
     args = [
-        DeclareLaunchArgument('database_path', default_value='./rtabmap_orbbec.db'),
+        DeclareLaunchArgument(
+            'database_path',
+            default_value='rtabmap_orbbec.db',
+        ),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('sensor_profile', default_value='lidar_rgbd'),
         DeclareLaunchArgument('start_livox', default_value='true'),
@@ -34,7 +59,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'edited_map_yaml',
-            default_value='/data/maps/site_a/map.yaml',
+            default_value='pgm_map/map.yaml',
             description='Offline-edited map YAML loaded when use_edited_map is true.',
         ),
         DeclareLaunchArgument('allow_last_pose_fallback', default_value='false'),
@@ -54,11 +79,11 @@ def generate_launch_description():
             'start_livox': LaunchConfiguration('start_livox'),
             'start_camera': LaunchConfiguration('start_camera'),
             'use_sim_time': use_sim_time,
-            'database_path': database_path,
+            'database_path': effective_database_path,
             'enable_rviz': LaunchConfiguration('enable_rviz'),
             'enable_rtabmap_viz': LaunchConfiguration('enable_rtabmap_viz'),
             'use_edited_map': use_edited_map,
-            'edited_map_yaml': edited_map_yaml,
+            'edited_map_yaml': effective_edited_map_yaml,
             'autostart': 'false',
             'enable_startup_localization_guard': 'false',
         }.items(),
@@ -73,7 +98,7 @@ def generate_launch_description():
             PathJoinSubstitution(
                 [visual_share, 'config', 'visual_initial_pose.yaml']),
             {
-                'database_path': database_path,
+                'database_path': effective_database_path,
                 'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
                 'allow_last_pose_fallback': ParameterValue(
                     allow_fallback, value_type=bool),

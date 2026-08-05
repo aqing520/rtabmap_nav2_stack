@@ -16,11 +16,11 @@ class MapPaintEditorNode(Node):
 
         self.load_yaml_path = self.declare_parameter(
             'load_yaml_path',
-            '/data/maps/site_a/map.yaml',
+            'pgm_map/map.yaml',
         ).value
         self.save_yaml_path = self.declare_parameter(
             'save_yaml_path',
-            '/data/maps/site_a/map.yaml',
+            'pgm_map/map.yaml',
         ).value
         self.brush_radius = int(self.declare_parameter('brush_radius_cells', 5).value)
         self.max_window_size = int(self.declare_parameter('max_window_size', 1000).value)

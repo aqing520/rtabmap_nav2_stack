@@ -12,12 +12,15 @@ Assumptions:
 """
 
 import os
+from pathlib import Path
 
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from nav2_common.launch import RewrittenYaml
 from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
@@ -64,7 +67,19 @@ DEFAULT_RTABMAP_ARGS = (
 )
 
 
+def _workspace_root(package_name: str) -> Path:
+    """Return the colcon workspace containing an installed package."""
+    prefix = Path(get_package_prefix(package_name))
+    if prefix.name == 'install':
+        return prefix.parent
+    if prefix.parent.name == 'install':
+        return prefix.parent.parent
+    return Path.cwd()
+
+
 def generate_launch_description() -> LaunchDescription:
+    workspace_root = _workspace_root('robot_bringup')
+
     namespace = LaunchConfiguration('namespace')
     mode = LaunchConfiguration('mode')
     sensor_profile = LaunchConfiguration('sensor_profile')
@@ -78,6 +93,10 @@ def generate_launch_description() -> LaunchDescription:
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     delete_db_on_mapping_start = LaunchConfiguration('delete_db_on_mapping_start')
     database_path = LaunchConfiguration('database_path')
+    effective_database_path = PathJoinSubstitution([
+        str(workspace_root),
+        database_path,
+    ])
     nav2_controller = LaunchConfiguration('nav2_controller')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     use_edited_map = LaunchConfiguration('use_edited_map')
@@ -106,8 +125,20 @@ def generate_launch_description() -> LaunchDescription:
     effective_edited_map_yaml = PythonExpression([
         "'", edited_map_yaml, "' if '", edited_map_yaml,
         "' else __import__('os').path.join(__import__('os').path.dirname('",
-        database_path, "'), 'map.yaml')"
+        effective_database_path, "'), 'pgm_map', 'map.yaml')"
     ])
+    bt_xml_path = PathJoinSubstitution([
+        robot_bringup_share,
+        'config',
+        'navigate_to_pose_clear_costmaps_on_goal_start.xml',
+    ])
+    configured_nav2_params = RewrittenYaml(
+        source_file=selected_nav2_params_file,
+        param_rewrites={
+            'default_nav_to_pose_bt_xml': bt_xml_path,
+        },
+        convert_types=True,
+    )
 
     declare_args = [
         DeclareLaunchArgument('namespace', default_value=''),
@@ -126,7 +157,11 @@ def generate_launch_description() -> LaunchDescription:
             default_value='true',
             description='Delete the RTAB-Map database automatically when mode:=mapping. Ignored for localization/navigation.',
         ),
-        DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db'),
+        DeclareLaunchArgument(
+            'database_path',
+            default_value='rtabmap_orbbec.db',
+            description='RTAB-Map database under the current workspace by default.',
+        ),
         DeclareLaunchArgument(
             'use_edited_map',
             default_value='true',
@@ -286,7 +321,7 @@ def generate_launch_description() -> LaunchDescription:
             'sensor_profile': sensor_profile,
             'enable_gps': enable_gps,
             'localization': PythonExpression(["'true' if '", mode, "' != 'mapping' else 'false'"]),
-            'database_path': database_path,
+            'database_path': effective_database_path,
             'rtabmap_args': LaunchConfiguration('rtabmap_args'),
             'frame_id': LaunchConfiguration('rtabmap_frame_id'),
             'map_frame_id': LaunchConfiguration('rtabmap_map_frame'),
@@ -361,7 +396,7 @@ def generate_launch_description() -> LaunchDescription:
                     'namespace': namespace,
                     'use_sim_time': use_sim_time,
                     'autostart': autostart,
-                    'params_file': selected_nav2_params_file,
+                    'params_file': configured_nav2_params,
                     'use_composition': 'False',
                     'use_respawn': 'False',
                     'log_level': 'info',

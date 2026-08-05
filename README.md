@@ -26,7 +26,7 @@
 ### 0.2 编译
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd rtabmap_nav2_stack
 source /opt/ros/humble/setup.bash
 bash scripts/do_build_all.sh
 ```
@@ -34,7 +34,7 @@ bash scripts/do_build_all.sh
 `scripts/do_build_all.sh` 会先准备 RTAB-Map 0.23.4 的本地库环境，再执行工作空间 `colcon build`。编译完成后，新终端运行前需要执行：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd rtabmap_nav2_stack
 source install/setup.bash
 ```
 
@@ -52,14 +52,14 @@ bash scripts/do_build_all.sh
 建图会启动 Livox、Orbbec、FAST-LIO、RTAB-Map 和 RViz，并默认重新写入 `rtabmap_orbbec.db`：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd rtabmap_nav2_stack
 source install/setup.bash
 ros2 launch robot_bringup fastlio_mapping_orbbec.launch.py \
   sensor_profile:=lidar_rgbd \
   start_livox:=true \
   start_camera:=true \
   use_sim_time:=false \
-  database_path:=/home/wheeltec/xz/rtabmap_nav2_stack/rtabmap_orbbec.db \
+  database_path:=./rtabmap_orbbec.db \
   rviz:=true \
   rtabmap_viz:=true \
   delete_db_on_start:=true
@@ -68,7 +68,7 @@ ros2 launch robot_bringup fastlio_mapping_orbbec.launch.py \
 导航会读取上一步生成的 `rtabmap_orbbec.db`，启动 Livox、Orbbec、FAST-LIO、RTAB-Map 定位、Nav2 和 RViz：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 source install/setup.bash
 ros2 launch robot_bringup bringup_orbbec.launch.py \
   mode:=navigation \
@@ -76,7 +76,7 @@ ros2 launch robot_bringup bringup_orbbec.launch.py \
   start_livox:=true \
   start_camera:=true \
   use_sim_time:=false \
-  database_path:=/home/wheeltec/xz/rtabmap_nav2_stack/rtabmap_orbbec.db \
+  database_path:=./rtabmap_orbbec.db \
   enable_rviz:=true \
   autostart:=true
 ```
@@ -114,7 +114,7 @@ bash scripts/start_orbbec_navigation_guarded.sh \
 位置并发布 `/initialpose`，使用：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 bash scripts/start_orbbec_navigation_visual_initial_pose.sh
 ```
 
@@ -342,7 +342,7 @@ python3 scripts/extract_pcd_from_db.py
 # 输出到 cloud_map/rtabmap_<timestamp>_cloud.pcd
 ```
 
-> 默认读取 `/data/maps/site_a/rtabmap.db`，可通过参数指定：
+> 默认读取 `rtabmap_orbbec.db`，可通过参数指定：
 > `python3 scripts/extract_pcd_from_db.py /path/to/rtabmap.db`
 
 ### 3.4 启动导航
@@ -355,7 +355,7 @@ bash scripts/start_with_global_localization.sh
 
 ```bash
 # 指定地图数据库
-bash scripts/start_with_global_localization.sh --db /data/maps/site_a/rtabmap.db
+bash scripts/start_with_global_localization.sh --db rtabmap_orbbec.db
 
 # 开启 RViz
 bash scripts/start_with_global_localization.sh --rviz
@@ -420,7 +420,7 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch robot_bringup bringup.launch.py \
   mode:=navigation \
-  database_path:=/data/maps/site_a/rtabmap.db \
+  database_path:=rtabmap_orbbec.db \
   start_multi_waypoint_routes:=true \
   waypoint_map_id:=site_a \
   waypoint_map_frame_id:=map
@@ -473,22 +473,22 @@ ros2 topic echo /multi_waypoint_route/points
 先从数据库导出导航地图：
 
 ```bash
-cd /home/wheeltec/xz/rtabmap_nav2_stack
+cd .
 
 bash scripts/export_rtabmap_map_offline.sh \
-  /data/maps/site_a/rtabmap.db \
-  /data/maps/site_a/map
+  rtabmap_orbbec.db \
+  pgm_map/map
 ```
 
 建图启动文件会记录本次实际使用的数据库路径。导出脚本会检查该记录，若
 导出命令指向另一个旧数据库会直接报错，避免编辑器继续显示上一张地图。
-开始一次新的建图时，旧的 `/data/maps/site_a/map.yaml` 和 `map.pgm` 会被
+开始一次新的建图时，旧的 `pgm_map/map.yaml` 和 `map.pgm` 会被
 移动为带时间戳的 `.bak` 备份；因此必须在建图正常结束后重新执行导出。
 完成建图后先在建图终端按 `Ctrl+C`，等待日志显示 RTAB-Map进程正常退出，
 再执行导出。编辑器启动日志会同时打印实际加载路径和文件修改时间。
 
 启动离线编辑器。加载路径和保存路径默认都是
-`/data/maps/site_a/map.yaml`：
+`pgm_map/map.yaml`：
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -499,18 +499,18 @@ ros2 launch map_paint_editor_plugin map_paint_editor.launch.py
 在窗口中完成修改后点击 `SAVE OVERWRITE`。编辑器会直接覆盖：
 
 ```text
-/data/maps/site_a/map.yaml
-/data/maps/site_a/map.pgm
+pgm_map/map.yaml
+pgm_map/map.pgm
 ```
 
 退出编辑器后，原来的 `bringup.launch.py` 导航命令无需增加地图参数：
 
 ```bash
-source /home/wheeltec/xz/rtabmap_nav2_stack/install/setup.bash
+source ./install/setup.bash
 
 ros2 launch robot_bringup bringup.launch.py \
   enable_rviz:=true \
-  database_path:=/data/maps/site_a/rtabmap.db
+  database_path:=rtabmap_orbbec.db
 ```
 
 导航模式现在默认加载数据库同目录下的 `map.yaml`。RTAB-Map仍使用
@@ -548,7 +548,7 @@ ros2 launch robot_bringup bringup.launch.py mode:=navigation nav2_controller:=cu
 ```bash
 ros2 launch robot_bringup bringup.launch.py \
   mode:=navigation \
-  nav2_params_file:=/home/wheeltec/xz/rtabmap_nav2_stack/install/robot_bringup/share/robot_bringup/config/nav2_mppi.yaml
+  nav2_params_file:=./install/robot_bringup/share/robot_bringup/config/nav2_mppi.yaml
 ```
 
 相关文件：
@@ -644,25 +644,23 @@ cloud_map/
 导航部署至少需要单独复制：
 
 ```text
-/data/maps/<map_id>/rtabmap.db          RTAB-Map 地图数据库
+maps/<map_id>/rtabmap.db          RTAB-Map 地图数据库
 <workspace>/cloud_map/<global_map>.pcd  HDL 全局定位使用的点云地图
 ```
 
-推荐在目标机器建立固定地图目录：
+推荐在项目根目录保存数据库和地图：
 
 ```bash
-sudo mkdir -p /data/maps/site_a
-sudo chown -R "$USER":"$USER" /data/maps/site_a
-cp /地图备份目录/rtabmap.db /data/maps/site_a/rtabmap.db
+cp /地图备份目录/rtabmap.db rtabmap_orbbec.db
 
-mkdir -p cloud_map
+mkdir -p pgm_map cloud_map
 cp /地图备份目录/global_map.pcd cloud_map/
 ```
 
 检查文件存在且不是空文件：
 
 ```bash
-ls -lh /data/maps/site_a/rtabmap.db
+ls -lh rtabmap_orbbec.db
 find cloud_map -maxdepth 1 -type f -name '*.pcd' -ls
 ```
 
@@ -673,7 +671,7 @@ find cloud_map -maxdepth 1 -type f -name '*.pcd' -ls
 先安装 ROS 2 Humble、colcon、rosdep 和项目依赖。以下命令应在仓库根目录执行：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 source /opt/ros/humble/setup.bash
 
 sudo rosdep init 2>/dev/null || true
@@ -700,7 +698,7 @@ git submodule update --init --recursive
 首次部署、切换机器、切换 ROS/JetPack/OpenCV，或 RTAB-Map 版本发生变化时，必须清理后完整编译：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 rm -rf build install log
 rm -rf third_party/rtabmap-0.23.4/build_local
 rm -rf third_party/rtabmap-0.23.4/install
@@ -737,7 +735,7 @@ RTAB-Map C++ 核心 0.22.0  <-> rtabmap_ros 0.22.0
 本项目必须使用第一组。每个新终端建议按以下顺序加载环境：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 source /opt/ros/humble/setup.bash
 source scripts/use_rtabmap_0234_env.sh
 source install/setup.bash
@@ -777,7 +775,7 @@ ldd "$RTABMAP_NODE" | grep -i rtabmap
 source /opt/ros/humble/setup.bash
 source ~/wheeltec_ros2/install/setup.bash       # 底盘基础工作空间（如果需要）
 source scripts/use_rtabmap_0234_env.sh
-source ~/xz/rtabmap_nav2_stack/install/setup.bash
+source ./install/setup.bash
 ```
 
 最后 source 的工作空间优先级最高。部署后务必检查：
@@ -795,14 +793,14 @@ ros2 pkg prefix rtabmap_ros
 启动文件默认地图路径为：
 
 ```text
-/data/maps/site_a/rtabmap.db
+rtabmap_orbbec.db
 ```
 
 如果目标机器使用不同地图，启动时必须显式传入 `--db`。全局定位使用的 PCD 也建议显式传入 `--pcd`，避免自动选中错误地图：
 
 ```bash
 bash scripts/start_with_global_localization.sh \
-  --db /data/maps/site_a/rtabmap.db \
+  --db rtabmap_orbbec.db \
   --pcd "$PWD/cloud_map/global_map.pcd" \
   --rviz
 ```
@@ -810,8 +808,8 @@ bash scripts/start_with_global_localization.sh \
 检查当前用户对数据库和设备有权限：
 
 ```bash
-test -r /data/maps/site_a/rtabmap.db && echo 'database readable'
-test -w /data/maps/site_a/rtabmap.db && echo 'database writable'
+test -r rtabmap_orbbec.db && echo 'database readable'
+test -w rtabmap_orbbec.db && echo 'database writable'
 ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 ```
 
@@ -827,21 +825,21 @@ sudo usermod -aG dialout "$USER"
 rg -n '/home/[^/]+/|/data/maps/' README.md scripts src/robot_bringup
 ```
 
-其中 `/data/maps/...` 可以作为约定的数据目录；指向旧用户目录的 `/home/...` 路径必须改为目标机器路径，或改用 ROS 包共享目录解析。
+当前启动文件通过 ROS 包安装前缀定位工作空间，配置中不再依赖固定用户名或固定地图目录。
 
 ### 8.9 启动导航前的完整检查
 
 每次部署后先执行：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 source /opt/ros/humble/setup.bash
 source scripts/use_rtabmap_0234_env.sh
 source install/setup.bash
 
 rtabmap --version
 ros2 pkg prefix rtabmap_ros
-ls -lh /data/maps/site_a/rtabmap.db
+ls -lh rtabmap_orbbec.db
 find cloud_map -maxdepth 1 -name '*.pcd' -ls
 ```
 
@@ -849,7 +847,7 @@ find cloud_map -maxdepth 1 -name '*.pcd' -ls
 
 ```bash
 bash scripts/start_with_global_localization.sh \
-  --db /data/maps/site_a/rtabmap.db \
+  --db rtabmap_orbbec.db \
   --pcd "$PWD/cloud_map/global_map.pcd" \
   --rviz
 ```
@@ -876,7 +874,7 @@ rtabmap.db + 全局 PCD
 
 ```bash
 # 1. 地图和日志
-ls -lh /data/maps/site_a/rtabmap.db
+ls -lh rtabmap_orbbec.db
 tail -n 200 /tmp/nav_logs/bringup.log
 grep -Ei 'error|failed|database|map|transform|plugin' /tmp/nav_logs/bringup.log
 
@@ -968,14 +966,14 @@ git diff -- src/robot_bringup/config
 在开发机执行：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 bash scripts/export_deployment_manifest.sh > deployment-source.txt
 ```
 
 把源码、地图和外部工作空间部署完成后，在目标机器执行同一命令：
 
 ```bash
-cd ~/xz/rtabmap_nav2_stack
+cd .
 bash scripts/export_deployment_manifest.sh > deployment-target.txt
 diff -u deployment-source.txt deployment-target.txt
 ```
@@ -1008,16 +1006,16 @@ wheeltec_ros2 源码校验值
 如果要求连地图内容也逐字节一致，应额外生成地图校验值：
 
 ```bash
-sha256sum /data/maps/site_a/rtabmap.db
+sha256sum rtabmap_orbbec.db
 sha256sum cloud_map/*.pcd
 ```
 
-建议固定使用相同目录：
+建议保持相同的相对目录结构：
 
 ```text
-/home/wheeltec/wheeltec_ros2
-/home/wheeltec/xz/rtabmap_nav2_stack
-/data/maps/site_a/rtabmap.db
+$HOME/wheeltec_ros2
+rtabmap_nav2_stack/
+rtabmap_orbbec.db
 ```
 
-这是因为当前部分配置仍包含 `/home/wheeltec/xz/...` 绝对路径。若目标机器目录不同，必须先消除这些绝对路径，否则即使版本一致也可能出现 BT XML、地图或插件资源加载失败。
+启动文件会根据 ROS 包安装前缀解析工作空间根目录；移动项目后需要重新编译，避免复用旧 `build/` 和 `install/`。

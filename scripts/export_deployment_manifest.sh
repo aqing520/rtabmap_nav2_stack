@@ -92,7 +92,7 @@ done
 
 section map_files
 {
-  find /data/maps -maxdepth 3 -type f \
+  find "$WS_DIR" -maxdepth 3 -type f \
     \( -name '*.db' -o -name '*.yaml' -o -name '*.pgm' \) \
     -printf '%p\t%s bytes\n' 2>/dev/null
   find "$WS_DIR/cloud_map" -maxdepth 1 -type f -name '*.pcd' \

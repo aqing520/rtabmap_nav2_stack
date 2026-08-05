@@ -7,7 +7,7 @@
         filter_size_map: 0.25
         cube_side_length: 1000.0
         runtime_pos_log_enable: false
-        map_file_path: "/home/wheeltec/xz/rtabmap_nav2_stack/cloud_map/fastlio_raw_map.pcd"
+        map_file_path: "cloud_map/fastlio_raw_map.pcd"
 
         common:
             lid_topic:  "/livox/lidar"

@@ -13,8 +13,8 @@ not included in `compute_time_ms`.
 ## Build
 
 ```bash
-cd /home/wheeltec/xz/rtabmap_nav2_stack
-source /home/wheeltec/wheeltec_ros2/install/setup.bash
+cd .
+source $HOME/wheeltec_ros2/install/setup.bash
 colcon build --symlink-install --packages-select nav2_controller_benchmark
 source install/setup.bash
 ```
@@ -24,8 +24,8 @@ source install/setup.bash
 Run from the source package so the DWB defaults path is available:
 
 ```bash
-PKG=/home/wheeltec/xz/rtabmap_nav2_stack/src/nav2_controller_benchmark
-BASE=/home/wheeltec/xz/rtabmap_nav2_stack/src/robot_bringup/config/nav2_common.yaml
+PKG=./src/nav2_controller_benchmark
+BASE=./src/robot_bringup/config/nav2_common.yaml
 
 python3 $PKG/scripts/prepare_benchmark_params.py \
   --controller mppi --base $BASE --output /tmp/nav2_benchmark_mppi.yaml
