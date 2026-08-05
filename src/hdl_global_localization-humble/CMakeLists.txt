@@ -90,6 +90,6 @@ rosidl_target_interfaces(hdl_global_localization_test ${PROJECT_NAME} "rosidl_ty
 
 
 
-install(DIRECTORY config DESTINATION share/hdl_global_localization)
+install(DIRECTORY config launch DESTINATION share/hdl_global_localization)
 
 ament_auto_package()

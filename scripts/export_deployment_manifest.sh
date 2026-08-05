@@ -60,7 +60,21 @@ for package in \
 done
 
 section rtabmap_runtime
-rtabmap --version 2>/dev/null | head -n 8 || echo 'rtabmap=missing'
+rtabmap_core_lib="$WS_DIR/third_party/rtabmap-0.23.4/install/lib/librtabmap_core.so.0.23.4"
+if [[ -f "$rtabmap_core_lib" ]]; then
+  printf 'project_core=%s\n' "$rtabmap_core_lib"
+else
+  echo 'project_core=missing'
+fi
+
+# `rtabmap` is the Qt GUI executable and aborts on headless deployments when
+# no display server is available. Use the console executable for a safe
+# system-runtime inventory instead.
+if command -v rtabmap-console >/dev/null 2>&1; then
+  rtabmap-console --version 2>/dev/null | sed -n '1,8p'
+else
+  echo 'rtabmap-console=missing'
+fi
 
 section selected_debian_packages
 for package in \

@@ -313,7 +313,8 @@ def main():
         print(f"[ERROR] {e}", file=sys.stderr)
         result = False
     finally:
-        rclpy.shutdown()          # 先让 spin() 退出
+        if rclpy.ok():
+            rclpy.shutdown()      # 先让 spin() 退出
         spin_thread.join(timeout=3.0)  # 等 spin 线程结束
         node.destroy_node()       # 再销毁节点
 
