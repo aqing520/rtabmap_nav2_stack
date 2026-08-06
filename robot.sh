@@ -22,6 +22,7 @@ ROS_LOG_DIR="$WS_DIR/roslog"
 export ROS_LOG_DIR
 LOG_FILTER="$WS_DIR/scripts/robot_log_filter.py"
 RELOCALIZATION_CLIENT="$WS_DIR/scripts/global_localization_node.py"
+PCD_EXPORTER="$WS_DIR/scripts/extract_pcd_from_db.py"
 STARTUP_CHECKER="$WS_DIR/scripts/robot_startup_check.py"
 
 ROBOT_STARTUP_CHECKS="${ROBOT_STARTUP_CHECKS:-true}"
@@ -37,6 +38,7 @@ RELOCALIZATION_MAX_ERROR="${RELOCALIZATION_MAX_ERROR:-inf}"
 RELOCALIZATION_MAX_RETRIES="${RELOCALIZATION_MAX_RETRIES:-1}"
 RELOCALIZATION_SCAN_TIMEOUT="${RELOCALIZATION_SCAN_TIMEOUT:-30.0}"
 RELOCALIZATION_SUBSCRIBER_TIMEOUT="${RELOCALIZATION_SUBSCRIBER_TIMEOUT:-15.0}"
+RELOCALIZATION_EXPORT_PCD="${RELOCALIZATION_EXPORT_PCD:-true}"
 MANUAL_INITIALPOSE_TIMEOUT="${MANUAL_INITIALPOSE_TIMEOUT:-86400.0}"
 MANUAL_INITIALPOSE_FALLBACK="${MANUAL_INITIALPOSE_FALLBACK:-true}"
 ALLOW_STALE_PCD="${ALLOW_STALE_PCD:-false}"
@@ -74,6 +76,7 @@ rel 模式可通过环境变量覆盖:
   RELOCALIZATION_MAX_RETRIES=1
   RELOCALIZATION_SCAN_TIMEOUT=30.0
   RELOCALIZATION_SUBSCRIBER_TIMEOUT=15.0
+  RELOCALIZATION_EXPORT_PCD=true
   MANUAL_INITIALPOSE_TIMEOUT=86400.0
   MANUAL_INITIALPOSE_FALLBACK=true
   ALLOW_STALE_PCD=false
@@ -128,6 +131,8 @@ fi
 if [[ "$MODE" == "rel" ]]; then
     [[ -f "$RELOCALIZATION_CLIENT" ]] \
         || die "未找到点云重定位客户端：$RELOCALIZATION_CLIENT"
+    [[ -f "$PCD_EXPORTER" ]] \
+        || die "未找到数据库点云导出脚本：$PCD_EXPORTER"
 fi
 
 mkdir -p "$DB_DIR" "$PCD_DIR" "$ROS_LOG_DIR"
@@ -380,8 +385,26 @@ latest_pcd() {
         | cut -d' ' -f2-
 }
 
+export_relocalization_pcd() {
+    echo "[INFO] 正在从当前 RTAB-Map 数据库导出重定位 PCD..." \
+        | tee -a "$TERMINAL_LOG"
+    run_logged_check python3 -u "$PCD_EXPORTER" \
+        "$DATABASE_PATH" \
+        "$PCD_DIR" \
+        || die "从数据库导出重定位 PCD 失败，未启动重定位。"
+}
+
 if [[ -z "$PCD_PATH" ]]; then
+    if [[ "$RELOCALIZATION_EXPORT_PCD" == "true" ]]; then
+        export_relocalization_pcd
+    else
+        echo "[WARN] RELOCALIZATION_EXPORT_PCD=false，使用已有最新 PCD。" \
+            | tee -a "$TERMINAL_LOG"
+    fi
     PCD_PATH="$(latest_pcd)"
+else
+    echo "[INFO] 已显式指定 PCD_PATH，跳过数据库自动导出。" \
+        | tee -a "$TERMINAL_LOG"
 fi
 
 [[ -n "$PCD_PATH" && -s "$PCD_PATH" ]] \

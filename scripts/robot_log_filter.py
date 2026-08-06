@@ -10,6 +10,51 @@ import time
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 DELAY_RE = re.compile(r"(?:delay=|differ on )([0-9.]+)")
+SEVERITY_RE = re.compile(
+    r"\[\s*(WARN(?:ING)?|ERROR|FATAL)\s*\]",
+    re.IGNORECASE,
+)
+UNTAGGED_WARNING_RE = re.compile(
+    r"(?:^|[\]\s:])warn(?:ing)?(?::|\s)",
+    re.IGNORECASE,
+)
+UNTAGGED_ERROR_RE = re.compile(
+    r"(?:^|[\]\s:])(?:error|fatal)(?::|\s)",
+    re.IGNORECASE,
+)
+ROS_TIME_RE = re.compile(r"\[\d{10,}(?:\.\d+)?\]")
+WALL_TIME_RE = re.compile(
+    r"\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\)"
+)
+NUMBER_RE = re.compile(r"(?<![A-Za-z_])[-+]?\d+(?:\.\d+)?")
+PROCESS_INDEX_RE = re.compile(r"^(\[[^\]]+)-\d+(\])")
+TRACEBACK_END_RE = re.compile(
+    r"(?:^|[\s:])(?:[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)|"
+    r"KeyboardInterrupt|SystemExit)(?::|$)"
+)
+
+UNTAGGED_ERROR_TEXT_LOWER = (
+    "segmentation fault",
+    "core dumped",
+    "terminate called",
+    "what():",
+    "exception in thread",
+    "unhandled exception",
+    "failed to load",
+    "could not load",
+    "cannot open shared object file",
+    "no such file or directory",
+    "permission denied",
+    "connection refused",
+    "address already in use",
+    "broken pipe",
+    "cuda error",
+    "out of memory",
+    "bad_alloc",
+    "double free",
+    "memory corruption",
+    "assertion failed",
+)
 
 
 class RobotLogFilter:
@@ -28,6 +73,13 @@ class RobotLogFilter:
         self.collision_stale_last_reported = 0
         self.collision_stale_delay = 0.0
         self.tf_timeout_total = 0
+        self.tag_tf_total = 0
+        self.tag_tf_last_reported = 0
+        self.rviz_queue_total = 0
+        self.rviz_queue_last_reported = 0
+        self.generic_events = {}
+        self.traceback_active = False
+        self.traceback_buffer = []
 
     @staticmethod
     def clean(line: str) -> str:
@@ -48,9 +100,105 @@ class RobotLogFilter:
             self.last_emit[key] = now
             self.emit(message)
 
+    @staticmethod
+    def severity(line: str) -> str:
+        match = SEVERITY_RE.search(line)
+        if match and match.group(1).upper() in ("ERROR", "FATAL"):
+            return "ERROR"
+        return "WARN"
+
+    @staticmethod
+    def event_signature(line: str) -> str:
+        """Normalize timestamps and changing numbers for repeat detection."""
+        signature = PROCESS_INDEX_RE.sub(r"\1-#\2", line)
+        signature = ROS_TIME_RE.sub("[time]", signature)
+        signature = WALL_TIME_RE.sub("(time)", signature)
+        signature = NUMBER_RE.sub("#", signature)
+        return " ".join(signature.split())
+
+    @staticmethod
+    def event_summary(line: str, limit: int = 320) -> str:
+        summary = ROS_TIME_RE.sub("", line)
+        summary = WALL_TIME_RE.sub("", summary)
+        summary = " ".join(summary.split())
+        if len(summary) > limit:
+            return summary[: limit - 3] + "..."
+        return summary
+
+    def emit_event(self, line: str, interval: float = None) -> None:
+        """Show every new warning/error, then summarize repeated instances."""
+        severity = self.severity(line)
+        if interval is None:
+            interval = 2.0 if severity == "ERROR" else 5.0
+
+        key = (severity, self.event_signature(line))
+        now = time.monotonic()
+        record = self.generic_events.get(key)
+        if record is None:
+            self.generic_events[key] = {
+                "severity": severity,
+                "sample": line,
+                "count": 1,
+                "reported": 1,
+                "last_emit": now,
+            }
+            self.emit(line)
+            return
+
+        record["count"] += 1
+        record["sample"] = line
+        if now - record["last_emit"] >= interval:
+            repeated = record["count"] - record["reported"]
+            self.emit(
+                f"[{severity}] 重复日志 {repeated} 次"
+                f"（累计 {record['count']} 次）："
+                f"{self.event_summary(record['sample'])}"
+            )
+            record["reported"] = record["count"]
+            record["last_emit"] = now
+
+    def flush_traceback(self) -> None:
+        if not self.traceback_buffer:
+            self.traceback_active = False
+            return
+
+        final_line = self.traceback_buffer[-1]
+        if (
+            "ExternalShutdownException" in final_line
+            or "KeyboardInterrupt" in final_line
+        ):
+            self.emit_once(
+                "python_shutdown",
+                "[INFO] Python 辅助节点已随 ROS 关闭。",
+            )
+        else:
+            self.emit("[ERROR] 检测到 Python Traceback：")
+            for traceback_line in self.traceback_buffer:
+                self.emit(traceback_line)
+
+        self.traceback_active = False
+        self.traceback_buffer = []
+
+    def process_traceback(self, line: str) -> bool:
+        if "Traceback (most recent call last):" in line:
+            self.traceback_active = True
+            self.traceback_buffer = [line]
+            return True
+
+        if not self.traceback_active:
+            return False
+
+        self.traceback_buffer.append(line)
+        if TRACEBACK_END_RE.search(line) or len(self.traceback_buffer) >= 40:
+            self.flush_traceback()
+        return True
+
     def process(self, raw_line: str) -> None:
         line = self.clean(raw_line)
         if not line:
+            return
+
+        if self.process_traceback(line):
             return
 
         # Normal shutdown is noisy in ROS 2 Humble. Keep one concise status line.
@@ -147,6 +295,60 @@ class RobotLogFilter:
                 )
             return
 
+        # Pure-LiDAR mode may still see another workspace's AprilTag topic.
+        # Show the problem, but collapse the two warnings emitted for every tag.
+        if (
+            "for tag detection" in line
+            or (
+                "getting transform" in line
+                and "camera_optical_frame" in line
+                and re.search(r'-> "[^"]+:\d+"', line)
+            )
+        ):
+            self.tag_tf_total += 1
+            now = time.monotonic()
+            if now - self.last_emit.get("tag_tf", -30.0) >= 30.0:
+                self.last_emit["tag_tf"] = now
+                self.tag_tf_last_reported = self.tag_tf_total
+                self.emit(
+                    "[WARN] 收到外部 AprilTag 检测，但缺少相机/Tag TF；"
+                    f"累计忽略 {self.tag_tf_total} 条相关警告"
+                )
+            return
+
+        # RViz message-filter queue overflow can produce thousands of warnings.
+        if (
+            "Message Filter dropping message" in line
+            and "queue is full" in line
+        ):
+            self.rviz_queue_total += 1
+            now = time.monotonic()
+            if now - self.last_emit.get("rviz_queue", -10.0) >= 10.0:
+                self.last_emit["rviz_queue"] = now
+                self.rviz_queue_last_reported = self.rviz_queue_total
+                self.emit(
+                    "[WARN] RViz 消息队列已满，正在丢弃显示数据；"
+                    f"累计 {self.rviz_queue_total} 次"
+                )
+            return
+
+        # A headless session commonly causes a short group of Qt messages.
+        if any(
+            text in line
+            for text in (
+                "qt.qpa.xcb: could not connect to display",
+                "Could not load the Qt platform plugin",
+                "no Qt platform plugin could be initialized",
+                "Available platform plugins are:",
+            )
+        ):
+            self.emit_once(
+                "rviz_display",
+                "[WARN] RViz 无法连接图形显示，RViz 将退出；"
+                "导航和重定位节点可继续运行。",
+            )
+            return
+
         # Hide known pure-LiDAR and startup noise.
         if any(
             text in line
@@ -210,21 +412,56 @@ class RobotLogFilter:
                 "Robot to continue normal operation",
             )
         ):
-            self.emit(line)
+            if SEVERITY_RE.search(line):
+                self.emit_event(line)
+            else:
+                self.emit(line)
             return
 
-        # Keep unexpected warnings and runtime errors. Expected shutdown errors
-        # were filtered above after the SIGINT marker.
-        if re.search(r"\[(?:\s*WARN(?:ING)?|ERROR|FATAL)\]", line):
-            self.emit(line)
+        # Every unknown warning/error is visible at least once. Repeated copies
+        # are summarized periodically instead of flooding the terminal.
+        if SEVERITY_RE.search(line):
+            self.emit_event(line)
+            return
+
+        # Some libraries print fatal failures without a ROS severity prefix.
+        lowered = line.lower()
+        if (
+            UNTAGGED_ERROR_RE.search(line)
+            or any(text in lowered for text in UNTAGGED_ERROR_TEXT_LOWER)
+        ):
+            self.emit_event(f"[ERROR] {line}")
+            return
+        if UNTAGGED_WARNING_RE.search(line):
+            self.emit_event(f"[WARN] {line}")
             return
 
     def finish(self) -> None:
+        self.flush_traceback()
         if self.collision_stale_total > self.collision_stale_last_reported:
             self.emit(
                 "[WARN] Collision Monitor 点云过期汇总："
                 f"最后延迟 {self.collision_stale_delay:.2f}s，"
                 f"累计忽略 {self.collision_stale_total} 次"
+            )
+        if self.tag_tf_total > self.tag_tf_last_reported:
+            self.emit(
+                "[WARN] AprilTag TF 警告汇总："
+                f"累计忽略 {self.tag_tf_total} 条相关警告"
+            )
+        if self.rviz_queue_total > self.rviz_queue_last_reported:
+            self.emit(
+                "[WARN] RViz 队列溢出汇总："
+                f"累计丢弃 {self.rviz_queue_total} 条显示消息"
+            )
+        for record in self.generic_events.values():
+            repeated = record["count"] - record["reported"]
+            if repeated <= 0:
+                continue
+            self.emit(
+                f"[{record['severity']}] 重复日志汇总："
+                f"新增 {repeated} 次，累计 {record['count']} 次："
+                f"{self.event_summary(record['sample'])}"
             )
         if self.shutdown:
             self.emit(f"[OK] 机器人{self.stack_name}已停止")

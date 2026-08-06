@@ -300,15 +300,27 @@ db/rtabmap.db
 db/pcd/*.pcd
 ```
 
-脚本默认选择 `db/pcd` 中修改时间最新的 PCD，也可以显式指定：
+`rel` 默认先调用 `scripts/extract_pcd_from_db.py`，从当前
+`db/rtabmap.db` 自动导出一份带时间戳的新 PCD 到 `db/pcd`，然后使用刚导出
+的最新文件进行 HDL 匹配。
+
+如果已经准备好指定的 PCD，可以显式传入；此时跳过自动导出：
 
 ```bash
 PCD_PATH=/absolute/path/to/map.pcd bash robot.sh rel
 ```
 
+仅调试时如需跳过自动导出并使用 `db/pcd` 中已有的最新 PCD：
+
+```bash
+RELOCALIZATION_EXPORT_PCD=false bash robot.sh rel
+```
+
 启动顺序为：
 
 ```text
+从 db/rtabmap.db 自动导出当前重定位 PCD
+              ↓
 Livox + FAST-LIO + RTAB-Map + HDL
               ↓
 Nav2 保持 inactive
