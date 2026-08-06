@@ -179,11 +179,11 @@ def main():
     workspace_root = Path(__file__).resolve().parents[1]
     db_path = (
         sys.argv[1] if len(sys.argv) > 1
-        else str(workspace_root / "rtabmap_orbbec.db")
+        else str(workspace_root / "db" / "rtabmap.db")
     )
     output_dir = (
         sys.argv[2] if len(sys.argv) > 2
-        else str(workspace_root / "cloud_map")
+        else str(workspace_root / "db" / "pcd")
     )
     os.makedirs(output_dir, exist_ok=True)
 
