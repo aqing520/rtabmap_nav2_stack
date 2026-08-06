@@ -1,8 +1,8 @@
 # RTAB-Map Nav2 Stack
 
-项目根目录的 `robot.sh` 是纯激光建图和导航的统一入口。当前系统使用
-Livox MID360、FAST-LIO、RTAB-Map 和 Nav2 CUDA MPPI，不启动相机、视觉
-定位、GPS 或 HDL 全局重定位。
+项目根目录的 `robot.sh` 是纯激光建图、导航和点云重定位的统一入口。
+当前系统使用 Livox MID360、FAST-LIO、RTAB-Map 和 Nav2 CUDA MPPI，
+不启动相机、视觉定位或 GPS；`rel` 模式按需启动 HDL 点云全局重定位。
 
 ## 1. 建图
 
@@ -206,8 +206,9 @@ RTAB-Map（localization 模式）
      /cmd_vel
 ```
 
-当前导航不启动视觉或 HDL 全局重定位，但 RTAB-Map 必须保持基础激光定位
-模式，用于读取数据库并提供 Nav2 所需的 `map → odom`。
+`nav` 模式不启动视觉或 HDL 全局重定位，但 RTAB-Map 必须保持基础激光
+定位模式，用于读取数据库并提供 Nav2 所需的 `map → odom`。机器人被搬动
+后需要全局搜索位置时，使用后面的 `rel` 模式。
 
 ### 2.3 Nav2 参数
 
@@ -253,6 +254,82 @@ ros2 node info /controller_server
 # 检查速度链路
 ros2 topic echo /cmd_vel_nav
 ros2 topic echo /cmd_vel
+```
+
+### 2.5 纯点云重定位启动
+
+机器人被搬动、不能继续使用上一次初始位置时，执行：
+
+```bash
+bash robot.sh rel
+```
+
+`rel` 模式要求以下两个地图产物来自同一次建图：
+
+```text
+db/rtabmap.db
+db/pcd/*.pcd
+```
+
+脚本默认选择 `db/pcd` 中修改时间最新的 PCD，也可以显式指定：
+
+```bash
+PCD_PATH=/absolute/path/to/map.pcd bash robot.sh rel
+```
+
+启动顺序为：
+
+```text
+Livox + FAST-LIO + RTAB-Map + HDL
+              ↓
+Nav2 保持 inactive
+              ↓
+当前 /cloud_registered_body 与全局 PCD 匹配
+              ↓
+等待 RTAB-Map 订阅者建立
+              ↓
+单次 TRANSIENT_LOCAL 发布 /initialpose
+              ↓
+保持 latch，等待 /localization_pose 和 map→base_footprint TF 确认
+              ↓
+确认后客户端退出并清除 latch
+              ↓
+激活 Collision Monitor 和 Nav2
+```
+
+自动重定位失败时，Nav2 会继续保持 inactive，终端提示用户在 RViz 中使用
+`2D Pose Estimate` 手动发布 `/initialpose`。脚本收到新的人工位姿后，还会
+等待 RTAB-Map 发布有效的 `/localization_pose`，并确认
+`map→base_footprint` TF 与该位姿一致；只有确认通过后才会继续激活
+Collision Monitor 和 Nav2。按 Ctrl+C 可以放弃人工定位并停止系统。
+
+自动发布不是周期发布，也不再连续发布三次。客户端先等待至少一个
+`/initialpose` 订阅者，再发布一次 transient-local 消息并保持节点存活。
+RTAB-Map 和 TF 确认成功后客户端退出，publisher 被销毁，缓存的 latch 随之消失。
+
+如需在自动重定位失败后直接退出，不等待人工位姿：
+
+```bash
+MANUAL_INITIALPOSE_FALLBACK=false bash robot.sh rel
+```
+
+默认还会拒绝使用修改时间早于数据库的 PCD，避免数据库和点云地图不一致。
+仅调试旧地图时可以临时：
+
+```bash
+ALLOW_STALE_PCD=true bash robot.sh rel
+```
+
+常用参数：
+
+```bash
+RELOCALIZATION_ENGINE=FPFH_RANSAC \
+RELOCALIZATION_MIN_INLIER=0.98 \
+RELOCALIZATION_MAX_RETRIES=3 \
+RELOCALIZATION_CONFIRMATION_TIMEOUT=30.0 \
+RELOCALIZATION_LINEAR_TOLERANCE=1.0 \
+RELOCALIZATION_YAW_TOLERANCE_DEG=30.0 \
+bash robot.sh rel enable_rviz:=false
 ```
 
 ## 3. 编译说明

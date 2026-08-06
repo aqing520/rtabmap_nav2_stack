@@ -3,12 +3,12 @@
 全局重定位导航启动入口。
 
 在 bringup.launch.py 基础上增加 hdl_global_localization_node，
-供 scripts/start_with_global_localization.sh 的 Phase 1 使用。
+供项目根目录 robot.sh rel 使用。
 
-Nav2 默认 autostart=false，等全局定位完成发布 /initialpose 后，
-由启动脚本的 Phase 3 手动激活。
+Nav2 固定 autostart=false。robot.sh rel 单次发布 /initialpose，并等待
+RTAB-Map localization_pose 和 TF 确认后再手动激活 Nav2。
 
-Usage（通常由 start_with_global_localization.sh 调用）:
+Usage（通常由 robot.sh rel 调用）:
   ros2 launch robot_bringup global_localization_bringup.launch.py
   ros2 launch robot_bringup global_localization_bringup.launch.py enable_rviz:=true
 """
@@ -45,13 +45,14 @@ def generate_launch_description() -> LaunchDescription:
     nav2_controller = LaunchConfiguration('nav2_controller')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     enable_collision_monitor = LaunchConfiguration('enable_collision_monitor')
+    use_edited_map = LaunchConfiguration('use_edited_map')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
 
     declare_args = [
         DeclareLaunchArgument(
             'database_path',
-            default_value='rtabmap_orbbec.db',
+            default_value='db/rtabmap.db',
         ),
         DeclareLaunchArgument(
             'mode',
@@ -65,7 +66,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             'nav2_controller',
             default_value='cuda_mppi',
-            description='Nav2 local controller: dwb | mppi | cuda_mppi',
+            description='Nav2 local controller: mppi | cuda_mppi',
         ),
         DeclareLaunchArgument(
             'nav2_params_file',
@@ -76,6 +77,11 @@ def generate_launch_description() -> LaunchDescription:
             'enable_collision_monitor',
             default_value='true',
             description='Filter Nav2 /cmd_vel through collision_monitor',
+        ),
+        DeclareLaunchArgument(
+            'use_edited_map',
+            default_value='false',
+            description='Use an offline edited Nav2 map instead of RTAB-Map /map.',
         ),
     ]
 
@@ -92,6 +98,12 @@ def generate_launch_description() -> LaunchDescription:
             'nav2_controller': nav2_controller,
             'nav2_params_file': nav2_params_file,
             'enable_collision_monitor': enable_collision_monitor,
+            'use_edited_map': use_edited_map,
+            'sensor_profile': 'lidar_only',
+            'start_livox': 'true',
+            'start_camera': 'false',
+            'enable_gps': 'false',
+            'start_multi_waypoint_routes': 'false',
         }.items(),
     )
 

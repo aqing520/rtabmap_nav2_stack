@@ -15,7 +15,12 @@ DELAY_RE = re.compile(r"(?:delay=|differ on )([0-9.]+)")
 class RobotLogFilter:
     def __init__(self, mode: str) -> None:
         self.mode = mode
-        self.stack_name = "建图栈" if mode == "map" else "导航栈"
+        if mode == "map":
+            self.stack_name = "建图栈"
+        elif mode == "rel":
+            self.stack_name = "重定位导航栈"
+        else:
+            self.stack_name = "导航栈"
         self.shutdown = False
         self.once_keys = set()
         self.last_emit = {}
@@ -227,7 +232,7 @@ class RobotLogFilter:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("map", "nav"), required=True)
+    parser.add_argument("--mode", choices=("map", "nav", "rel"), required=True)
     args = parser.parse_args()
 
     # ros2 launch must receive Ctrl+C, while the log consumer should keep
