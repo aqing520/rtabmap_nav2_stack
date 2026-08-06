@@ -67,6 +67,7 @@ def generate_launch_description() -> LaunchDescription:
             'nav2_controller',
             default_value='cuda_mppi',
             description='Nav2 local controller: mppi | cuda_mppi',
+            choices=['mppi', 'cuda_mppi'],
         ),
         DeclareLaunchArgument(
             'nav2_params_file',

@@ -1,4 +1,4 @@
-# Nav2 MPPI/DWB runtime benchmark
+# Nav2 MPPI runtime benchmark
 
 This package measures two different quantities:
 
@@ -21,20 +21,17 @@ source install/setup.bash
 
 ## Generate test configurations
 
-Run from the source package so the DWB defaults path is available:
+Generate a timing-wrapper configuration from the existing MPPI parameters:
 
 ```bash
 PKG=./src/nav2_controller_benchmark
-BASE=./src/robot_bringup/config/nav2_common.yaml
+BASE=./src/robot_bringup/config/nav2_mppi.yaml
 
 python3 $PKG/scripts/prepare_benchmark_params.py \
   --controller mppi --base $BASE --output /tmp/nav2_benchmark_mppi.yaml
-python3 $PKG/scripts/prepare_benchmark_params.py \
-  --controller dwb --base $BASE --output /tmp/nav2_benchmark_dwb.yaml
 ```
 
-The generated files leave the original configuration untouched. Review and tune
-`config/dwb_defaults.yaml` for the robot before a motion test.
+The generated file leaves the original configuration untouched.
 
 ## Run one trial
 
@@ -53,21 +50,19 @@ ros2 run nav2_controller_benchmark controller_runtime_monitor.py \
   --output /tmp/mppi_run1.csv
 ```
 
-Repeat the same route with DWB and a new output file. Only rows with `active=1`
-belong to active FollowPath computation. Each run also creates a raw per-call
-file such as `/tmp/mppi_run1_compute.csv`.
+Only rows with `active=1` belong to active FollowPath computation. Each run
+also creates a raw per-call file such as `/tmp/mppi_run1_compute.csv`.
 
-Use at least five alternating trials (`MPPI, DWB, MPPI, DWB, ...`) after one
-warm-up run per controller. Keep the map, route, controller frequency, costmaps,
-sensor input, speed limits, and background processes unchanged.
+Use at least five trials after one warm-up run. Keep the map, route, controller
+frequency, costmaps, sensor input, speed limits, and background processes
+unchanged.
 
 Summarize completed trials:
 
 ```bash
 ros2 run nav2_controller_benchmark summarize_benchmark.py \
   --controller-frequency 15 \
-  /tmp/mppi_run1.csv /tmp/mppi_run2.csv \
-  /tmp/dwb_run1.csv /tmp/dwb_run2.csv
+  /tmp/mppi_run1.csv /tmp/mppi_run2.csv
 ```
 
 Use the same label (for example `mppi`) for trials that should be pooled into

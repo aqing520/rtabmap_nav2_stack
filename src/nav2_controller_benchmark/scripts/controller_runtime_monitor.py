@@ -218,7 +218,7 @@ class ControllerRuntimeMonitor(Node):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--label", required=True, help="e.g. mppi_run1 or dwb_run1")
+    parser.add_argument("--label", required=True, help="e.g. mppi_run1")
     parser.add_argument("--topic", default="/cmd_vel_nav")
     parser.add_argument(
         "--timing-topic", default="/controller_benchmark/compute_time_ms"
