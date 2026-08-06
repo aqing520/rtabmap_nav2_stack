@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WS_DIR="$SCRIPT_DIR"
 DB_DIR="$WS_DIR/db"
 DATABASE_PATH="$DB_DIR/rtabmap.db"
+ROS_LOG_DIR="$WS_DIR/roslog"
+export ROS_LOG_DIR
+LOG_FILTER="$WS_DIR/scripts/robot_log_filter.py"
 
 usage() {
     cat <<EOF
@@ -28,6 +31,7 @@ usage() {
   GPS         : 关闭
   全局重定位  : 关闭
   数据库      : $DATABASE_PATH
+  ROS日志     : $ROS_LOG_DIR
   Nav2 控制器 : CUDA MPPI
 
 可在模式后追加 launch 参数，例如:
@@ -66,8 +70,10 @@ esac
     || die "未找到 /opt/ros/humble/setup.bash"
 [[ -f "$WS_DIR/install/setup.bash" ]] \
     || die "项目尚未编译，请先在项目根目录执行编译。"
+[[ -f "$LOG_FILTER" ]] \
+    || die "未找到终端日志过滤器：$LOG_FILTER"
 
-mkdir -p "$DB_DIR"
+mkdir -p "$DB_DIR" "$ROS_LOG_DIR"
 
 # ROS/colcon setup files can reference variables before defining them.
 set +u
@@ -88,16 +94,40 @@ fi
 source "$WS_DIR/install/setup.bash"
 set -u
 
-echo "============================================================"
-echo "  RTAB-Map Nav2 纯激光管理脚本"
-echo "  模式     : $MODE"
-echo "  工作空间 : $WS_DIR"
-echo "  数据库   : $DATABASE_PATH"
-echo "============================================================"
+TERMINAL_LOG="$ROS_LOG_DIR/terminal_${MODE}_$(date '+%Y-%m-%d_%H-%M-%S').log"
+
+{
+    echo "============================================================"
+    echo "  RTAB-Map Nav2 纯激光管理脚本"
+    echo "  模式     : $MODE"
+    echo "  工作空间 : $WS_DIR"
+    echo "  数据库   : $DATABASE_PATH"
+    echo "  ROS日志  : $ROS_LOG_DIR"
+    echo "  完整输出 : $TERMINAL_LOG"
+    echo "============================================================"
+} | tee "$TERMINAL_LOG"
+
+run_with_filtered_terminal() {
+    local launch_status
+
+    # ros2 launch receives Ctrl+C normally. The shell, tee and filter stay
+    # alive long enough to record and summarize the complete shutdown output.
+    trap ':' INT
+    set +e
+    "$@" > >(
+        tee -ia "$TERMINAL_LOG" \
+            | python3 -u "$LOG_FILTER" --mode "$MODE"
+    ) 2>&1
+    launch_status="$?"
+    set -e
+    trap - INT
+
+    exit "$launch_status"
+}
 
 if [[ "$MODE" == "map" ]]; then
     echo "[INFO] 启动纯激光建图；已有数据库将由 RTAB-Map 清空后重建。"
-    exec ros2 launch robot_bringup fastlio_mapping.launch.py \
+    run_with_filtered_terminal ros2 launch robot_bringup fastlio_mapping.launch.py \
         rviz:=true \
         rtabmap_viz:=false \
         "$@" \
@@ -116,7 +146,7 @@ ros2 pkg prefix cuda_mppi_controller >/dev/null 2>&1 \
     || die "当前环境中找不到 cuda_mppi_controller，请检查 CUDA MPPI 工作空间。"
 
 echo "[INFO] 启动基础导航，不启用相机、视觉定位或全局重定位。"
-exec ros2 launch robot_bringup bringup.launch.py \
+run_with_filtered_terminal ros2 launch robot_bringup bringup.launch.py \
     autostart:=true \
     enable_rviz:=true \
     enable_collision_monitor:=true \
