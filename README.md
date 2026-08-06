@@ -146,12 +146,16 @@ bash robot.sh nav
 
 脚本会自动：
 
-1. 检查 `db/rtabmap.db` 是否存在且非空。
-2. 加载 `/opt/ros/humble/setup.bash`。
-3. 加载 `~/cuda_robotics_ws/install/setup.bash`，或
+1. 启动前执行 `pkill -f ros2`，清理上一轮 ROS 2 启动进程并等待 1 秒。
+2. 检查 `db/rtabmap.db` 是否存在且非空。
+3. 加载 `/opt/ros/humble/setup.bash`。
+4. 加载 `~/cuda_robotics_ws/install/setup.bash`，或
    `CUDA_ROBOTICS_SETUP` 指定的 CUDA 工作空间。
-4. 检查 `cuda_mppi_controller` 是否可用。
-5. 启动 `robot_bringup/bringup.launch.py` 的导航模式。
+5. 检查 `cuda_mppi_controller` 是否可用。
+6. 以 `autostart=false` 启动 `robot_bringup/bringup.launch.py`。
+7. 确认 `/cloud_registered_body` 和 `/Odometry` 都只有一个 publisher，
+   并连续检查点云、里程计及 `odom → base_footprint` TF 的时间戳新鲜度。
+8. 检查通过后才激活 Collision Monitor 和 Nav2。
 
 默认关键参数为：
 
@@ -162,7 +166,7 @@ sensor_profile=lidar_only
 start_livox=true
 start_camera=false
 enable_gps=false
-autostart=true
+autostart=false（由 robot.sh 检查通过后手动激活）
 enable_rviz=true
 enable_collision_monitor=true
 use_edited_map=false
@@ -209,6 +213,31 @@ RTAB-Map（localization 模式）
 `nav` 模式不启动视觉或 HDL 全局重定位，但 RTAB-Map 必须保持基础激光
 定位模式，用于读取数据库并提供 Nav2 所需的 `map → odom`。机器人被搬动
 后需要全局搜索位置时，使用后面的 `rel` 模式。
+
+`map`、`nav`、`rel` 三种模式都会在启动前执行 `pkill -f ros2`。该工作流
+假设机器人只运行本项目；如果同一台机器还运行其他 ROS 2 任务，它们也可能
+被一并停止。默认等待 1 秒后再启动新栈，可通过下面的变量调整：
+
+```bash
+ROBOT_ROS2_CLEANUP_WAIT=2.0 bash robot.sh nav
+```
+
+`nav/rel` 另外要求连续 5 组数据的消息年龄不超过 0.5 秒。检查失败时
+Nav2 保持 inactive，本次 launch 进程组会被停止。阈值可临时调整：
+
+```bash
+ROBOT_SENSOR_CHECK_TIMEOUT=30.0 \
+ROBOT_SENSOR_MAX_AGE=0.5 \
+ROBOT_SENSOR_REQUIRED_SAMPLES=5 \
+bash robot.sh nav
+```
+
+只在明确知道风险的调试场景下，才可关闭 `nav/rel` 的数据新鲜度检查。
+启动前的 `pkill -f ros2` 仍然会执行：
+
+```bash
+ROBOT_STARTUP_CHECKS=false bash robot.sh nav
+```
 
 ### 2.3 Nav2 参数
 
@@ -284,28 +313,32 @@ Livox + FAST-LIO + RTAB-Map + HDL
               ↓
 Nav2 保持 inactive
               ↓
-当前 /cloud_registered_body 与全局 PCD 匹配
+确认点云、里程计、odom→base_footprint TF 连续新鲜
+              ↓
+HDL 地图特征加载完成后丢弃加载期间缓存的旧扫描
+              ↓
+等待新的 /cloud_registered_body 与全局 PCD 匹配
               ↓
 等待 RTAB-Map 订阅者建立
               ↓
 单次 TRANSIENT_LOCAL 发布 /initialpose
               ↓
-保持 latch，等待 /localization_pose 和 map→base_footprint TF 确认
+相信已发布的 /initialpose，不做 localization_pose/TF 二次确认
               ↓
-确认后客户端退出并清除 latch
+短暂等待消息交付后客户端退出并清除 latch
               ↓
 激活 Collision Monitor 和 Nav2
 ```
 
 自动重定位失败时，Nav2 会继续保持 inactive，终端提示用户在 RViz 中使用
-`2D Pose Estimate` 手动发布 `/initialpose`。脚本收到新的人工位姿后，还会
-等待 RTAB-Map 发布有效的 `/localization_pose`，并确认
-`map→base_footprint` TF 与该位姿一致；只有确认通过后才会继续激活
-Collision Monitor 和 Nav2。按 Ctrl+C 可以放弃人工定位并停止系统。
+`2D Pose Estimate` 手动发布 `/initialpose`。脚本收到新的人工位姿后直接
+激活 Collision Monitor 和 Nav2，不再检查 `/localization_pose`、协方差或
+`map→base_footprint` TF 是否与初始位姿一致。按 Ctrl+C 可以放弃人工定位
+并停止系统。
 
 自动发布不是周期发布，也不再连续发布三次。客户端先等待至少一个
-`/initialpose` 订阅者，再发布一次 transient-local 消息并保持节点存活。
-RTAB-Map 和 TF 确认成功后客户端退出，publisher 被销毁，缓存的 latch 随之消失。
+`/initialpose` 订阅者，再发布一次 transient-local 消息。短暂等待 DDS
+交付后客户端退出，publisher 被销毁，缓存的 latch 随之消失。
 
 如需在自动重定位失败后直接退出，不等待人工位姿：
 
@@ -325,10 +358,7 @@ ALLOW_STALE_PCD=true bash robot.sh rel
 ```bash
 RELOCALIZATION_ENGINE=FPFH_RANSAC \
 RELOCALIZATION_MIN_INLIER=0.98 \
-RELOCALIZATION_MAX_RETRIES=3 \
-RELOCALIZATION_CONFIRMATION_TIMEOUT=30.0 \
-RELOCALIZATION_LINEAR_TOLERANCE=1.0 \
-RELOCALIZATION_YAW_TOLERANCE_DEG=30.0 \
+RELOCALIZATION_MAX_RETRIES=1 \
 bash robot.sh rel enable_rviz:=false
 ```
 

@@ -5,8 +5,8 @@
 在 bringup.launch.py 基础上增加 hdl_global_localization_node，
 供项目根目录 robot.sh rel 使用。
 
-Nav2 固定 autostart=false。robot.sh rel 单次发布 /initialpose，并等待
-RTAB-Map localization_pose 和 TF 确认后再手动激活 Nav2。
+Nav2 固定 autostart=false。robot.sh rel 单次发布 /initialpose，发布完成后
+直接手动激活 Nav2，不再等待 localization_pose 或 TF 二次确认。
 
 Usage（通常由 robot.sh rel 调用）:
   ros2 launch robot_bringup global_localization_bringup.launch.py
