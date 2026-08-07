@@ -74,3 +74,6 @@ pgm_map/
 /db/
 /roslog/
 /docx/
+
+# Generated test results and evidence (local only)
+test_results/
