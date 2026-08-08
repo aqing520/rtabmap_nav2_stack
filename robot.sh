@@ -23,6 +23,9 @@ export ROS_LOG_DIR
 LOG_FILTER="$WS_DIR/scripts/robot_log_filter.py"
 RELOCALIZATION_CLIENT="$WS_DIR/scripts/global_localization_node.py"
 PCD_EXPORTER="$WS_DIR/scripts/extract_pcd_from_db.py"
+STRUCTURAL_EXPORTER="$WS_DIR/scripts/export_structural_map_from_db.py"
+CACHE_BUILDER="$WS_DIR/scripts/build_hdl_map_cache.py"
+CACHE_ROOT="$PCD_DIR/cache/fpfh_ransac"
 STARTUP_CHECKER="$WS_DIR/scripts/robot_startup_check.py"
 
 ROBOT_STARTUP_CHECKS="${ROBOT_STARTUP_CHECKS:-true}"
@@ -33,12 +36,26 @@ ROBOT_SENSOR_MAX_FUTURE="${ROBOT_SENSOR_MAX_FUTURE:-0.2}"
 ROBOT_SENSOR_REQUIRED_SAMPLES="${ROBOT_SENSOR_REQUIRED_SAMPLES:-5}"
 
 RELOCALIZATION_ENGINE="${RELOCALIZATION_ENGINE:-FPFH_RANSAC}"
+RELOCALIZATION_PROFILE="${RELOCALIZATION_PROFILE:-legacy_fpfh_v1}"
+CACHE_PROFILE="${CACHE_PROFILE:-$RELOCALIZATION_PROFILE}"
 RELOCALIZATION_MIN_INLIER="${RELOCALIZATION_MIN_INLIER:-0.98}"
 RELOCALIZATION_MAX_ERROR="${RELOCALIZATION_MAX_ERROR:-inf}"
 RELOCALIZATION_MAX_RETRIES="${RELOCALIZATION_MAX_RETRIES:-1}"
 RELOCALIZATION_SCAN_TIMEOUT="${RELOCALIZATION_SCAN_TIMEOUT:-30.0}"
 RELOCALIZATION_SUBSCRIBER_TIMEOUT="${RELOCALIZATION_SUBSCRIBER_TIMEOUT:-15.0}"
-RELOCALIZATION_EXPORT_PCD="${RELOCALIZATION_EXPORT_PCD:-true}"
+RELOCALIZATION_EXPORT_PCD="${RELOCALIZATION_EXPORT_PCD:-false}"
+RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP="${RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP:-false}"
+FORCE_REBUILD_CACHE="${FORCE_REBUILD_CACHE:-false}"
+RELOCALIZATION_QUERY_V2="${RELOCALIZATION_QUERY_V2:-false}"
+RELOCALIZATION_QUERY_ACCUMULATION_SEC="${RELOCALIZATION_QUERY_ACCUMULATION_SEC:-0.0}"
+RELOCALIZATION_QUERY_MIN_FRAMES="${RELOCALIZATION_QUERY_MIN_FRAMES:-5}"
+RELOCALIZATION_QUERY_MAX_FRAMES="${RELOCALIZATION_QUERY_MAX_FRAMES:-30}"
+RELOCALIZATION_QUERY_MAX_POINTS="${RELOCALIZATION_QUERY_MAX_POINTS:-30000}"
+RELOCALIZATION_QUERY_SURFACE_VOXEL="${RELOCALIZATION_QUERY_SURFACE_VOXEL:-0.10}"
+RELOCALIZATION_ODOM_SYNC_TOLERANCE="${RELOCALIZATION_ODOM_SYNC_TOLERANCE:-0.02}"
+RELOCALIZATION_DIAGNOSTIC_CANDIDATES="${RELOCALIZATION_DIAGNOSTIC_CANDIDATES:-20}"
+RELOCALIZATION_CAPTURE_QUERY_BAG="${RELOCALIZATION_CAPTURE_QUERY_BAG:-false}"
+RELOCALIZATION_SAVE_DIAGNOSTICS="${RELOCALIZATION_SAVE_DIAGNOSTICS:-true}"
 MANUAL_INITIALPOSE_TIMEOUT="${MANUAL_INITIALPOSE_TIMEOUT:-86400.0}"
 MANUAL_INITIALPOSE_FALLBACK="${MANUAL_INITIALPOSE_FALLBACK:-true}"
 ALLOW_STALE_PCD="${ALLOW_STALE_PCD:-false}"
@@ -49,6 +66,7 @@ usage() {
 用法:
   ./robot.sh map    纯激光雷达建图
   ./robot.sh nav    使用 db/rtabmap.db 启动基础导航
+  ./robot.sh cache  离线导出PCD并生成FPFH缓存
   ./robot.sh rel    先做纯点云全局重定位，成功后再激活导航
 
 固定配置:
@@ -71,12 +89,19 @@ usage() {
 rel 模式可通过环境变量覆盖:
   PCD_PATH=/path/to/map.pcd
   RELOCALIZATION_ENGINE=FPFH_RANSAC
+  RELOCALIZATION_PROFILE=legacy_fpfh_v1
+  CACHE_PROFILE=legacy_fpfh_v1
   RELOCALIZATION_MIN_INLIER=0.98
   RELOCALIZATION_MAX_ERROR=inf
   RELOCALIZATION_MAX_RETRIES=1
   RELOCALIZATION_SCAN_TIMEOUT=30.0
   RELOCALIZATION_SUBSCRIBER_TIMEOUT=15.0
-  RELOCALIZATION_EXPORT_PCD=true
+  RELOCALIZATION_EXPORT_PCD=false
+  RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP=false
+  RELOCALIZATION_QUERY_V2=false
+  RELOCALIZATION_QUERY_ACCUMULATION_SEC=0.0
+  RELOCALIZATION_CAPTURE_QUERY_BAG=false
+  RELOCALIZATION_SAVE_DIAGNOSTICS=true
   MANUAL_INITIALPOSE_TIMEOUT=86400.0
   MANUAL_INITIALPOSE_FALLBACK=true
   ALLOW_STALE_PCD=false
@@ -105,7 +130,7 @@ MODE="$1"
 shift
 
 case "$MODE" in
-    map|nav|rel)
+    map|nav|cache|rel)
         ;;
     -h|--help|help)
         usage
@@ -113,7 +138,7 @@ case "$MODE" in
         ;;
     *)
         usage >&2
-        die "未知模式 '$MODE'，只能传 map、nav 或 rel。"
+        die "未知模式 '$MODE'，只能传 map、nav、cache 或 rel。"
         ;;
 esac
 
@@ -128,11 +153,15 @@ if [[ "$ROBOT_STARTUP_CHECKS" == "true" &&
     [[ -f "$STARTUP_CHECKER" ]] \
         || die "未找到启动检查脚本：$STARTUP_CHECKER"
 fi
-if [[ "$MODE" == "rel" ]]; then
+if [[ "$MODE" == "rel" || "$MODE" == "cache" ]]; then
     [[ -f "$RELOCALIZATION_CLIENT" ]] \
         || die "未找到点云重定位客户端：$RELOCALIZATION_CLIENT"
     [[ -f "$PCD_EXPORTER" ]] \
         || die "未找到数据库点云导出脚本：$PCD_EXPORTER"
+    [[ -f "$CACHE_BUILDER" ]] \
+        || die "未找到HDL缓存构建脚本：$CACHE_BUILDER"
+    [[ -f "$STRUCTURAL_EXPORTER" ]] \
+        || die "未找到结构地图导出脚本：$STRUCTURAL_EXPORTER"
 fi
 
 mkdir -p "$DB_DIR" "$PCD_DIR" "$ROS_LOG_DIR"
@@ -166,6 +195,10 @@ TERMINAL_LOG="$ROS_LOG_DIR/terminal_${MODE}_$(date '+%Y-%m-%d_%H-%M-%S').log"
     echo "  数据库   : $DATABASE_PATH"
     if [[ "$MODE" == "rel" ]]; then
         echo "  重定位   : HDL $RELOCALIZATION_ENGINE"
+        echo "  profile  : $RELOCALIZATION_PROFILE"
+    elif [[ "$MODE" == "cache" ]]; then
+        echo "  缓存目录 : $CACHE_ROOT"
+        echo "  profile  : $CACHE_PROFILE"
     fi
     echo "  ROS日志  : $ROS_LOG_DIR"
     echo "  完整输出 : $TERMINAL_LOG"
@@ -310,6 +343,95 @@ finish_with_stack() {
     exit "$launch_status"
 }
 
+validate_fpfh_profile() {
+    case "$1" in
+        legacy_fpfh_v1|garage_structural_v1)
+            ;;
+        *)
+            die "不支持的FPFH profile：$1（仅支持 legacy_fpfh_v1 或 garage_structural_v1）"
+            ;;
+    esac
+}
+
+if [[ "$MODE" == "cache" ]]; then
+    validate_fpfh_profile "$CACHE_PROFILE"
+    CACHE_PCD_PATH="$PCD_PATH"
+    if [[ "$CACHE_PROFILE" == "garage_structural_v1" ]]; then
+        [[ -s "$DATABASE_PATH" ]] \
+            || die "数据库不存在或为空：$DATABASE_PATH。请先执行 ./robot.sh map"
+        if [[ -n "$CACHE_PCD_PATH" ]]; then
+            echo "[WARN] garage_structural_v1 使用数据库和 Admin.opt_* 作为缓存源；忽略 PCD_PATH=$CACHE_PCD_PATH" \
+                | tee -a "$TERMINAL_LOG"
+        fi
+        STRUCTURAL_BUILD_DIR="$PCD_DIR/structural_build/$CACHE_PROFILE"
+        mkdir -p "$STRUCTURAL_BUILD_DIR"
+        echo "[INFO] 从当前RTAB-Map数据库导出结构地图（需要 Admin.opt_ids/opt_poses）..." \
+            | tee -a "$TERMINAL_LOG"
+        STRUCTURAL_EXPORT_OUTPUT="$(
+            python3 -u "$STRUCTURAL_EXPORTER" \
+                "$DATABASE_PATH" "$STRUCTURAL_BUILD_DIR" \
+                --profile "$CACHE_PROFILE" 2>&1
+        )" || {
+            printf '%s\n' "$STRUCTURAL_EXPORT_OUTPUT" | tee -a "$TERMINAL_LOG"
+            die "结构地图导出失败。"
+        }
+        printf '%s\n' "$STRUCTURAL_EXPORT_OUTPUT" | tee -a "$TERMINAL_LOG"
+        STRUCTURAL_SURFACE="$(
+            sed -n 's/^STRUCTURAL_SURFACE: //p' <<<"$STRUCTURAL_EXPORT_OUTPUT" | tail -n 1
+        )"
+        STRUCTURAL_KEYPOINTS="$(
+            sed -n 's/^STRUCTURAL_KEYPOINTS: //p' <<<"$STRUCTURAL_EXPORT_OUTPUT" | tail -n 1
+        )"
+        [[ -n "$STRUCTURAL_SURFACE" && -s "$STRUCTURAL_SURFACE" ]] \
+            || die "结构surface PCD无效。"
+        [[ -n "$STRUCTURAL_KEYPOINTS" && -s "$STRUCTURAL_KEYPOINTS" ]] \
+            || die "结构keypoints PCD无效。"
+        CACHE_PCD_PATH="$(realpath "$DATABASE_PATH")"
+    elif [[ -z "$CACHE_PCD_PATH" ]]; then
+        [[ -s "$DATABASE_PATH" ]] \
+            || die "数据库不存在或为空：$DATABASE_PATH。请先执行 ./robot.sh map"
+        echo "[INFO] 从当前RTAB-Map数据库导出离线缓存源PCD..." \
+            | tee -a "$TERMINAL_LOG"
+        CACHE_EXPORT_OUTPUT="$(
+            python3 -u "$PCD_EXPORTER" "$DATABASE_PATH" "$PCD_DIR" 2>&1
+        )" || {
+            printf '%s\n' "$CACHE_EXPORT_OUTPUT" | tee -a "$TERMINAL_LOG"
+            die "缓存源PCD导出失败。"
+        }
+        printf '%s\n' "$CACHE_EXPORT_OUTPUT" | tee -a "$TERMINAL_LOG"
+        CACHE_PCD_PATH="$(
+            sed -n 's/^  PCD: //p' <<<"$CACHE_EXPORT_OUTPUT" | tail -n 1
+        )"
+    fi
+
+    [[ -n "$CACHE_PCD_PATH" && -s "$CACHE_PCD_PATH" ]] \
+        || die "没有可用于缓存构建的地图源文件。"
+    CACHE_PCD_PATH="$(realpath "$CACHE_PCD_PATH")"
+
+    CACHE_ARGS=(
+        "$CACHE_PCD_PATH"
+        --cache-root "$CACHE_ROOT"
+        --profile "$CACHE_PROFILE"
+    )
+    if [[ "$CACHE_PROFILE" == "garage_structural_v1" ]]; then
+        CACHE_ARGS+=(
+            --structural-surface "$STRUCTURAL_SURFACE"
+            --structural-keypoints "$STRUCTURAL_KEYPOINTS"
+        )
+    fi
+    if [[ "$FORCE_REBUILD_CACHE" == "true" ]]; then
+        CACHE_ARGS+=(--force)
+    fi
+    echo "[INFO] 离线构建FPFH缓存：$CACHE_PCD_PATH" \
+        | tee -a "$TERMINAL_LOG"
+    python3 -u "$CACHE_BUILDER" "${CACHE_ARGS[@]}" \
+        2>&1 | tee -a "$TERMINAL_LOG" \
+        || die "FPFH缓存构建或校验失败。"
+    echo "[READY] 离线FPFH缓存已生成；未启动任何传感器或导航节点。" \
+        | tee -a "$TERMINAL_LOG"
+    exit 0
+fi
+
 cleanup_previous_ros2
 
 if [[ "$MODE" == "map" ]]; then
@@ -385,6 +507,37 @@ latest_pcd() {
         | cut -d' ' -f2-
 }
 
+active_cache_source_for_profile() {
+    local profile="$1"
+    local active_json="$CACHE_ROOT/active.json"
+
+    [[ -s "$active_json" ]] || return 1
+    python3 - "$active_json" "$profile" <<'PY'
+import json
+import os
+import sys
+
+active_json, requested_profile = sys.argv[1:3]
+try:
+    with open(active_json, "r", encoding="utf-8") as stream:
+        active = json.load(stream)
+except Exception:
+    sys.exit(1)
+
+if active.get("profile_name") != requested_profile:
+    sys.exit(2)
+
+source_pcd = active.get("source_pcd") or ""
+cache_directory = active.get("cache_directory") or ""
+if not source_pcd or not os.path.isfile(source_pcd):
+    sys.exit(3)
+if cache_directory and not os.path.isdir(cache_directory):
+    sys.exit(4)
+
+print(os.path.realpath(source_pcd))
+PY
+}
+
 export_relocalization_pcd() {
     echo "[INFO] 正在从当前 RTAB-Map 数据库导出重定位 PCD..." \
         | tee -a "$TERMINAL_LOG"
@@ -394,33 +547,101 @@ export_relocalization_pcd() {
         || die "从数据库导出重定位 PCD 失败，未启动重定位。"
 }
 
-if [[ -z "$PCD_PATH" ]]; then
-    if [[ "$RELOCALIZATION_EXPORT_PCD" == "true" ]]; then
-        export_relocalization_pcd
+RELOCALIZATION_CACHE_DIR=""
+RELOCALIZATION_CACHE_SOURCE_PATH=""
+RELOCALIZATION_MAP_INPUT_PATH=""
+if [[ "$RELOCALIZATION_ENGINE" == "FPFH_RANSAC" ]]; then
+    validate_fpfh_profile "$RELOCALIZATION_PROFILE"
+    if [[ "$RELOCALIZATION_PROFILE" == "garage_structural_v1" ]]; then
+        if [[ "$RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP" == "true" ]]; then
+            die "garage_structural_v1 不支持在线地图FPFH计算；请先执行 CACHE_PROFILE=garage_structural_v1 ./robot.sh cache"
+        fi
+        RELOCALIZATION_CACHE_SOURCE_PATH="$(realpath "$DATABASE_PATH")"
+        RELOCALIZATION_MAP_INPUT_PATH="$RELOCALIZATION_CACHE_SOURCE_PATH"
+        if [[ -n "$PCD_PATH" ]]; then
+            echo "[WARN] garage_structural_v1 使用数据库作为缓存源；忽略重定位 PCD_PATH=$PCD_PATH" \
+                | tee -a "$TERMINAL_LOG"
+        fi
     else
-        echo "[WARN] RELOCALIZATION_EXPORT_PCD=false，使用已有最新 PCD。" \
-            | tee -a "$TERMINAL_LOG"
+        if [[ -z "$PCD_PATH" ]]; then
+            if [[ "$RELOCALIZATION_EXPORT_PCD" == "true" ]]; then
+                export_relocalization_pcd
+                PCD_PATH="$(latest_pcd)"
+            elif ACTIVE_CACHE_SOURCE="$(
+                active_cache_source_for_profile "$RELOCALIZATION_PROFILE"
+            )"; then
+                PCD_PATH="$ACTIVE_CACHE_SOURCE"
+                echo "[INFO] 使用 active FPFH 缓存记录中的源地图：$PCD_PATH" \
+                    | tee -a "$TERMINAL_LOG"
+            else
+                echo "[WARN] 未找到可用 active FPFH 缓存记录，回退使用已有最新 PCD。" \
+                    | tee -a "$TERMINAL_LOG"
+                PCD_PATH="$(latest_pcd)"
+            fi
+        else
+            echo "[INFO] 已显式指定 PCD_PATH，跳过数据库自动导出。" \
+                | tee -a "$TERMINAL_LOG"
+        fi
+
+        [[ -n "$PCD_PATH" && -s "$PCD_PATH" ]] \
+            || die "没有可用的重定位 PCD。请先把当前地图导出到：$PCD_DIR"
+
+        PCD_PATH="$(realpath "$PCD_PATH")"
+        if [[ "$ALLOW_STALE_PCD" != "true" && "$PCD_PATH" -ot "$DATABASE_PATH" ]]; then
+            echo "[WARN] PCD 比数据库旧：$PCD_PATH；rel 阶段将继续按 source hash 校验并加载离线 FPFH 缓存，不再强制重建缓存。" \
+                | tee -a "$TERMINAL_LOG"
+        fi
+        RELOCALIZATION_CACHE_SOURCE_PATH="$PCD_PATH"
+        RELOCALIZATION_MAP_INPUT_PATH="$PCD_PATH"
     fi
-    PCD_PATH="$(latest_pcd)"
+
+    set +e
+    CACHE_LOOKUP_OUTPUT="$(
+        python3 -u "$CACHE_BUILDER" "$RELOCALIZATION_CACHE_SOURCE_PATH" \
+            --cache-root "$CACHE_ROOT" \
+            --profile "$RELOCALIZATION_PROFILE" \
+            --locate-only 2>&1
+    )"
+    CACHE_LOOKUP_STATUS="$?"
+    set -e
+    if [[ "$CACHE_LOOKUP_STATUS" -eq 0 ]]; then
+        RELOCALIZATION_CACHE_DIR="$(
+            sed -n 's/^CACHE_DIR: //p' <<<"$CACHE_LOOKUP_OUTPUT" | tail -n 1
+        )"
+        echo "[INFO] FPFH缓存命中：$RELOCALIZATION_CACHE_DIR" \
+            | tee -a "$TERMINAL_LOG"
+    elif [[ "$RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP" == "true" ]]; then
+        printf '%s\n' "$CACHE_LOOKUP_OUTPUT" | tee -a "$TERMINAL_LOG"
+        echo "[WARN] 缓存不可用；已显式允许在线地图FPFH计算。" \
+            | tee -a "$TERMINAL_LOG"
+    else
+        printf '%s\n' "$CACHE_LOOKUP_OUTPUT" | tee -a "$TERMINAL_LOG"
+        if [[ "$RELOCALIZATION_PROFILE" == "garage_structural_v1" ]]; then
+            die "FPFH缓存缺失或失效。请先执行：CACHE_PROFILE=garage_structural_v1 ./robot.sh cache"
+        fi
+        die "FPFH缓存缺失或失效。请先执行：PCD_PATH='$PCD_PATH' ./robot.sh cache"
+    fi
 else
-    echo "[INFO] 已显式指定 PCD_PATH，跳过数据库自动导出。" \
-        | tee -a "$TERMINAL_LOG"
-fi
-
-[[ -n "$PCD_PATH" && -s "$PCD_PATH" ]] \
-    || die "没有可用的重定位 PCD。请先把当前地图导出到：$PCD_DIR"
-
-PCD_PATH="$(realpath "$PCD_PATH")"
-if [[ "$ALLOW_STALE_PCD" != "true" && "$PCD_PATH" -ot "$DATABASE_PATH" ]]; then
-    die "PCD 比数据库旧，拒绝使用不匹配地图：$PCD_PATH。请重新导出 PCD；仅调试时可设置 ALLOW_STALE_PCD=true"
+    if [[ -z "$PCD_PATH" ]]; then
+        PCD_PATH="$(latest_pcd)"
+    fi
+    [[ -n "$PCD_PATH" && -s "$PCD_PATH" ]] \
+        || die "没有可用的重定位 PCD。请先把当前地图导出到：$PCD_DIR"
+    RELOCALIZATION_MAP_INPUT_PATH="$(realpath "$PCD_PATH")"
 fi
 
 echo "[INFO] 启动纯点云重定位；Nav2 将保持 inactive，直到重定位成功。"
-echo "[INFO] PCD地图：$PCD_PATH"
+echo "[INFO] 地图源：$RELOCALIZATION_MAP_INPUT_PATH"
+if [[ -n "$RELOCALIZATION_CACHE_SOURCE_PATH" ]]; then
+    echo "[INFO] 缓存源：$RELOCALIZATION_CACHE_SOURCE_PATH"
+fi
 
 COLLISION_MONITOR_ENABLED="$(
     launch_arg_value enable_collision_monitor true "$@"
 )"
+if [[ "$RELOCALIZATION_ENGINE" == "FPFH_RANSAC" ]]; then
+    export HDL_FPFH_PROFILE="$RELOCALIZATION_PROFILE"
+fi
 install_stack_cleanup_traps
 start_background_stack rel \
     ros2 launch robot_bringup global_localization_bringup.launch.py \
@@ -436,7 +657,8 @@ kill -0 "$STACK_LAUNCH_PID" 2>/dev/null \
     || die "重定位 launch 已提前退出，请查看：$TERMINAL_LOG"
 
 set +e
-python3 "$RELOCALIZATION_CLIENT" "$PCD_PATH" \
+RELOCALIZATION_CLIENT_ARGS=(
+    "$RELOCALIZATION_MAP_INPUT_PATH"
     --engine "$RELOCALIZATION_ENGINE" \
     --min-inlier "$RELOCALIZATION_MIN_INLIER" \
     --max-error "$RELOCALIZATION_MAX_ERROR" \
@@ -445,6 +667,35 @@ python3 "$RELOCALIZATION_CLIENT" "$PCD_PATH" \
     --max-scan-age "$ROBOT_SENSOR_MAX_AGE" \
     --max-future-skew "$ROBOT_SENSOR_MAX_FUTURE" \
     --subscriber-timeout "$RELOCALIZATION_SUBSCRIBER_TIMEOUT" \
+    --diagnostic-candidates "$RELOCALIZATION_DIAGNOSTIC_CANDIDATES" \
+    --query-accumulation-sec "$RELOCALIZATION_QUERY_ACCUMULATION_SEC" \
+    --query-min-frames "$RELOCALIZATION_QUERY_MIN_FRAMES" \
+    --query-max-frames "$RELOCALIZATION_QUERY_MAX_FRAMES" \
+    --query-max-points "$RELOCALIZATION_QUERY_MAX_POINTS" \
+    --query-surface-voxel "$RELOCALIZATION_QUERY_SURFACE_VOXEL" \
+    --odom-sync-tolerance "$RELOCALIZATION_ODOM_SYNC_TOLERANCE"
+)
+if [[ -n "$RELOCALIZATION_CACHE_DIR" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(--cache-dir "$RELOCALIZATION_CACHE_DIR")
+fi
+if [[ -n "$RELOCALIZATION_CACHE_SOURCE_PATH" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(
+        --cache-source-path "$RELOCALIZATION_CACHE_SOURCE_PATH"
+    )
+fi
+if [[ "$RELOCALIZATION_ALLOW_ONLINE_MAP_SETUP" == "true" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(--allow-online-map-setup)
+fi
+if [[ "$RELOCALIZATION_QUERY_V2" == "true" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(--query-v2)
+fi
+if [[ "$RELOCALIZATION_CAPTURE_QUERY_BAG" == "true" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(--capture-query-bag)
+fi
+if [[ "$RELOCALIZATION_SAVE_DIAGNOSTICS" != "true" ]]; then
+    RELOCALIZATION_CLIENT_ARGS+=(--no-save-diagnostics)
+fi
+python3 "$RELOCALIZATION_CLIENT" "${RELOCALIZATION_CLIENT_ARGS[@]}" \
     2>&1 | tee -a "$TERMINAL_LOG"
 RELOCALIZATION_STATUS="${PIPESTATUS[0]}"
 set -e

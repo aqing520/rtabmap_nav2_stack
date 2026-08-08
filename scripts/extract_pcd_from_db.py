@@ -117,11 +117,46 @@ def parse_pose_blob(blob):
     return T
 
 
-def get_optimized_poses(db_path):
-    """Get optimized poses from the database link graph using simple pose composition.
+def get_admin_optimized_poses(db_path, required=False):
+    """Read Admin.opt_ids/Admin.opt_poses as node_id -> optimized 4x4 pose."""
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT opt_ids, opt_poses FROM Admin LIMIT 1")
+    row = cur.fetchone()
+    conn.close()
+    if row is None or row[0] is None or row[1] is None:
+        if required:
+            raise RuntimeError("Admin.opt_ids/opt_poses are missing")
+        return {}
 
-    For a quick export, we just use the odometry poses directly.
-    """
+    ids, _n_ids, _id_channels = decompress_cv_mat(row[0])
+    poses_flat, _n_pose_values, _pose_channels = decompress_cv_mat(row[1])
+    if ids is None or poses_flat is None:
+        if required:
+            raise RuntimeError("Admin.opt_ids/opt_poses decompression failed")
+        return {}
+    ids = np.asarray(ids, dtype=np.int32).reshape(-1)
+    poses_flat = np.asarray(poses_flat, dtype=np.float32).reshape(-1)
+    if poses_flat.size != ids.size * 12:
+        message = (
+            f"Admin.opt_poses size mismatch: poses={poses_flat.size}, "
+            f"ids={ids.size}"
+        )
+        if required:
+            raise RuntimeError(message)
+        print(f"[WARN] {message}")
+        return {}
+
+    poses = {}
+    for node_id, pose_values in zip(ids, poses_flat.reshape(-1, 12)):
+        T = np.eye(4, dtype=np.float32)
+        T[:3, :] = pose_values.reshape(3, 4)
+        poses[int(node_id)] = T
+    return poses
+
+
+def get_node_poses(db_path):
+    """Get odometry poses from Node.pose."""
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
@@ -138,6 +173,16 @@ def get_optimized_poses(db_path):
             poses[node_id] = T
     conn.close()
     return poses
+
+
+def get_optimized_poses(db_path):
+    """Get optimized poses from Admin.opt_*; warn before falling back to Node.pose."""
+    poses = get_admin_optimized_poses(db_path, required=False)
+    if poses:
+        print("[INFO] Using Admin.opt_ids/Admin.opt_poses optimized poses")
+        return poses
+    print("[WARN] Admin optimized poses unavailable; falling back to Node.pose")
+    return get_node_poses(db_path)
 
 
 def write_pcd_binary(filename, points, fields=None):
