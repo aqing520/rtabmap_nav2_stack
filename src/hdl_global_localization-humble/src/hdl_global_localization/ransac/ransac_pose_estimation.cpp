@@ -41,6 +41,9 @@
  */
 
 #include <atomic>
+#include <algorithm>
+#include <chrono>
+#include <stdexcept>
 #include <vector>
 #include <random>
 #include <spdlog/spdlog.h>
@@ -62,8 +65,23 @@ RansacPoseEstimation<FeatureT>::RansacPoseEstimation(const RansacPoseEstimationP
 
 template <typename FeatureT>
 void RansacPoseEstimation<FeatureT>::set_target(pcl::PointCloud<pcl::PointXYZ>::ConstPtr target, typename pcl::PointCloud<FeatureT>::ConstPtr target_features) {
-  this->target = target;
+  set_target(target, target_features, target);
+}
+
+template <typename FeatureT>
+void RansacPoseEstimation<FeatureT>::set_target(
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target_keypoints,
+  typename pcl::PointCloud<FeatureT>::ConstPtr target_features,
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target_evaluation_cloud) {
+  if (!target_keypoints || !target_features || !target_evaluation_cloud ||
+      target_keypoints->empty() || target_evaluation_cloud->empty() ||
+      target_keypoints->size() != target_features->size()) {
+    throw std::invalid_argument("invalid RANSAC target clouds/features");
+  }
+
+  this->target = target_keypoints;
   this->target_features = target_features;
+  this->target_evaluation_cloud = target_evaluation_cloud;
   feature_tree.reset(new pcl::KdTreeFLANN<FeatureT>);
   feature_tree->setInputCloud(target_features);
 
@@ -72,7 +90,7 @@ void RansacPoseEstimation<FeatureT>::set_target(pcl::PointCloud<pcl::PointXYZ>::
   } else {
     evaluater.reset(new MatchingCostEvaluaterFlann());
   }
-  evaluater->set_target(target, params.max_correspondence_distance);
+  evaluater->set_target(target_evaluation_cloud, params.max_correspondence_distance);
 }
 
 template <typename FeatureT>
@@ -83,6 +101,7 @@ void RansacPoseEstimation<FeatureT>::set_source(pcl::PointCloud<pcl::PointXYZ>::
 
 template <typename FeatureT>
 GlobalLocalizationResults RansacPoseEstimation<FeatureT>::estimate() {
+  const auto estimate_started = std::chrono::steady_clock::now();
   pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ> transformation_estimation;
 
   pcl::registration::CorrespondenceRejectorPoly<pcl::PointXYZ, pcl::PointXYZ> correspondence_rejection;
@@ -91,20 +110,23 @@ GlobalLocalizationResults RansacPoseEstimation<FeatureT>::estimate() {
   correspondence_rejection.setCardinality(3);
   correspondence_rejection.setSimilarityThreshold(params.similarity_threshold);
 
-  spdlog::info("RANSAC : Precompute Nearest Features");
+  const auto feature_started = std::chrono::steady_clock::now();
+  spdlog::info("RANSAC: precomputing nearest feature correspondences (source_points={})", source->size());
   std::vector<std::vector<int>> similar_features(source->size());
 #pragma omp parallel for
   for (int i = 0; i < source->size(); i++) {
     std::vector<float> sq_dists;
     feature_tree->nearestKSearch(source_features->at(i), params.correspondence_randomness, similar_features[i], sq_dists);
   }
+  const double feature_sec = std::chrono::duration<double>(
+    std::chrono::steady_clock::now() - feature_started).count();
 
   std::vector<std::mt19937> mts(omp_get_max_threads());
   for (int i = 0; i < mts.size(); i++) {
     mts[i] = std::mt19937(i * 8191 + i + target->size() + source->size());
   }
 
-  spdlog::info("RANSAC : Main Loop");
+  spdlog::info("RANSAC: main loop (matching_budget={}, max_iterations={})", params.matching_budget, params.max_iterations);
   std::atomic_int matching_count(0);
   std::atomic_int iterations(0);
   std::vector<GlobalLocalizationResult::Ptr> results(params.max_iterations);
@@ -137,14 +159,29 @@ GlobalLocalizationResults RansacPoseEstimation<FeatureT>::estimate() {
     matching_count++;
     double inlier_fraction = 0.0;
     double matching_error = evaluater->calc_matching_error(*source, transformation, &inlier_fraction);
-    spdlog::info("RANSAC : iteration={} matching_count={} error={} inlier={}", iterations, matching_count, matching_error, inlier_fraction);
+    if (matching_count > 0 && matching_count % 5000 == 0) {
+      spdlog::debug(
+        "RANSAC progress: iterations={} matching_count={}",
+        iterations.load(), matching_count.load());
+    }
 
     if (inlier_fraction > min_inlier_fraction) {
       results[i].reset(new GlobalLocalizationResult(matching_error, inlier_fraction, Eigen::Isometry3f(transformation)));
     }
   }
 
-  return GlobalLocalizationResults(results);
+  GlobalLocalizationResults output(results);
+  const auto valid_count = std::count_if(
+    output.results.begin(), output.results.end(),
+    [](const auto& result) { return result != nullptr; });
+  const double total_sec = std::chrono::duration<double>(
+    std::chrono::steady_clock::now() - estimate_started).count();
+  spdlog::info(
+    "RANSAC summary: source_points={} feature_lookup_sec={:.6f} "
+    "iterations={} matching_count={} valid_candidates={} total_sec={:.6f}",
+    source->size(), feature_sec, iterations.load(), matching_count.load(),
+    valid_count, total_sec);
+  return output;
 }
 
 template <typename FeatureT>

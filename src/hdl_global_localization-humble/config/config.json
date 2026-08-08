@@ -1,6 +1,7 @@
 {
   "global": {
     "config_base": "config_base.json",
-    "config_bbs": "config_bbs.json"
+    "config_bbs": "config_bbs.json",
+    "config_fpfh": "config_fpfh.json"
   }
 }

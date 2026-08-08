@@ -71,7 +71,13 @@ class RansacPoseEstimation {
 public:
   RansacPoseEstimation(const RansacPoseEstimationParams& params = RansacPoseEstimationParams());
 
-  void set_target(pcl::PointCloud<pcl::PointXYZ>::ConstPtr target, typename pcl::PointCloud<FeatureT>::ConstPtr target_features);
+  void set_target(
+    pcl::PointCloud<pcl::PointXYZ>::ConstPtr target,
+    typename pcl::PointCloud<FeatureT>::ConstPtr target_features);
+  void set_target(
+    pcl::PointCloud<pcl::PointXYZ>::ConstPtr target_keypoints,
+    typename pcl::PointCloud<FeatureT>::ConstPtr target_features,
+    pcl::PointCloud<pcl::PointXYZ>::ConstPtr target_evaluation_cloud);
   void set_source(pcl::PointCloud<pcl::PointXYZ>::ConstPtr source, typename pcl::PointCloud<FeatureT>::ConstPtr source_features);
 
   GlobalLocalizationResults estimate();
@@ -83,6 +89,7 @@ private:
   const RansacPoseEstimationParams params;
 
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr target;
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target_evaluation_cloud;
   typename pcl::PointCloud<FeatureT>::ConstPtr target_features;
 
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr source;

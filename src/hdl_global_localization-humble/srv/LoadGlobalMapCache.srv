@@ -1,0 +1,12 @@
+string source_pcd_path
+string cache_directory
+---
+bool success
+bool cache_hit
+string message
+string cache_key
+uint64 surface_points
+uint64 keypoint_points
+float64 cache_load_sec
+float64 feature_index_sec
+float64 evaluator_build_sec

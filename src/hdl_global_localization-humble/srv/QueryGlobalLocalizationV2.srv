@@ -1,0 +1,27 @@
+int64 max_num_candidates
+sensor_msgs/PointCloud2 cloud
+float64 matching_deadline_sec
+---
+std_msgs/Header header
+std_msgs/Header globalmap_header
+
+bool success
+string score_profile
+string rejection_reason
+float64 total_time_sec
+
+geometry_msgs/Pose[] diagnostic_coarse_poses
+float64[] diagnostic_coarse_inliers
+float64[] diagnostic_coarse_errors
+
+geometry_msgs/Pose[] poses
+float64[] coarse_inliers
+float64[] coarse_errors
+float64[] fine_overlap_q2m
+float64[] fine_overlap_m2q
+float64[] fine_trimmed_rmse
+float64[] degeneracy_ratios
+float64[] top1_top2_margins
+string[] refinement_status
+bool[] candidate_valid
+string[] candidate_rejection_reasons

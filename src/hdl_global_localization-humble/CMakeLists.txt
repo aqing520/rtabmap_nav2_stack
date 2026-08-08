@@ -3,6 +3,7 @@ project(hdl_global_localization)
 
 find_package(OpenCV REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -41,10 +42,12 @@ find_package(nlohmann_json REQUIRED)
 
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/LoadGlobalMapCache.srv"
   "srv/QueryGlobalLocalization.srv"
+  "srv/QueryGlobalLocalizationV2.srv"
   "srv/SetGlobalLocalizationEngine.srv"
   "srv/SetGlobalMap.srv"
-  DEPENDENCIES sensor_msgs
+  DEPENDENCIES geometry_msgs sensor_msgs std_msgs
 )
 ament_export_dependencies(rosidl_default_runtime)
 
@@ -54,6 +57,7 @@ ament_export_dependencies(rosidl_default_runtime)
 
 ament_auto_add_library(hdl_global_localization_engines SHARED
   src/hdl_global_localization/util/config.cpp
+  src/hdl_global_localization/cache/map_feature_cache.cpp
   src/hdl_global_localization/bbs/bbs_localization.cpp
   src/hdl_global_localization/ransac/voxelset.cpp
   src/hdl_global_localization/ransac/ransac_pose_estimation.cpp
@@ -68,6 +72,7 @@ target_link_libraries(hdl_global_localization_engines
   ${OpenCV_LIBS}
   spdlog::spdlog
   nlohmann_json::nlohmann_json
+  OpenSSL::Crypto
 )
 
 
@@ -78,6 +83,14 @@ target_link_libraries(hdl_global_localization_node
   hdl_global_localization_engines
 )
 rosidl_target_interfaces(hdl_global_localization_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+ament_auto_add_executable(build_fpfh_cache
+  src/build_fpfh_cache.cpp
+)
+target_link_libraries(build_fpfh_cache
+  hdl_global_localization_engines
+  OpenSSL::Crypto
+)
 
 
 ament_auto_add_executable(hdl_global_localization_test

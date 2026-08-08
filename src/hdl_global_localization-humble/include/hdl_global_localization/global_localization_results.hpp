@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <algorithm>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -27,12 +28,16 @@ struct GlobalLocalizationResults {
     auto remove_loc = std::remove_if(results.begin(), results.end(), [](const auto& result) { return result == nullptr; });
     results.erase(remove_loc, results.end());
 
-    std::cout << "valid solutions:" << results.size() << std::endl;
-
-    // std::sort(results.begin(), results.end(), [](const auto& lhs, const auto& rhs) { return lhs->error < rhs->error; });
-    std::sort(results.begin(), results.end(), [](const auto& lhs, const auto& rhs) { return lhs->inlier_fraction > rhs->inlier_fraction; });
-    if (results.size() > max_num_candidates) {
-      results.erase(results.begin() + max_num_candidates, results.end());
+    std::sort(results.begin(), results.end(), [](const auto& lhs, const auto& rhs) {
+      if (lhs->inlier_fraction != rhs->inlier_fraction) {
+        return lhs->inlier_fraction > rhs->inlier_fraction;
+      }
+      return lhs->error < rhs->error;
+    });
+    const auto limit =
+      static_cast<std::size_t>(std::max(0, max_num_candidates));
+    if (results.size() > limit) {
+      results.erase(results.begin() + limit, results.end());
     }
 
     return *this;

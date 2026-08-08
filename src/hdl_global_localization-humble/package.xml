@@ -29,8 +29,10 @@
   <depend>pcl_ros</depend>
   <depend>nav_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>libopencv-dev</depend>
+  <depend>libssl-dev</depend>
 
   <export>
     <build_type condition="$ROS_VERSION == 1">catkin</build_type>
