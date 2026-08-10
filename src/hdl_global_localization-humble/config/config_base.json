@@ -1,6 +1,6 @@
 {
   "base": {
-    "globalmap_downsample_resolution": 0.2,
-    "query_downsample_resolution": 0.2
+    "globalmap_downsample_resolution": 0.0,
+    "query_downsample_resolution": 0.0
   }
 }

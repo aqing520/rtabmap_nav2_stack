@@ -240,6 +240,8 @@ def main() -> int:
         return 1
 
     try:
+        profile_data = json.loads(profile_json.read_text(encoding="utf-8"))
+        profile = profile_data["profiles"][args.profile]
         builder_identity = cache_builder_identity()
         cache_dir = expected_cache_dir(
             source_pcd,
@@ -369,7 +371,13 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="hdl_legacy_map_") as temp_dir:
         prepared_path = Path(temp_dir) / "prepared_map.pcd"
-        prepared, metadata = preprocess_legacy_pcd(str(source_pcd))
+        prepared, metadata = preprocess_legacy_pcd(
+            str(source_pcd),
+            voxel_size=profile.get("preprocessing_voxel"),
+            target_points=int(profile.get("target_points", 0)),
+            z_min=profile.get("z_min"),
+            z_max=profile.get("z_max"),
+        )
         import open3d as o3d
 
         if not o3d.io.write_point_cloud(
@@ -380,7 +388,9 @@ def main() -> int:
             "[map] "
             f"raw={metadata['raw_points']} "
             f"height_filtered={metadata['height_filtered_points']} "
-            f"prepared={metadata['prepared_points']}"
+            f"prepared={metadata['prepared_points']} "
+            f"z=[{metadata['z_min']}, {metadata['z_max']}] "
+            f"python_voxel={metadata['python_voxel']}"
         )
 
         command = find_builder() + [

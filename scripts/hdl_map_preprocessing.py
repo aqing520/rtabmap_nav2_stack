@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Shared HDL map preprocessing helpers.
-
-The legacy profile intentionally reproduces the preprocessing previously
-embedded in global_localization_node.py.
-"""
+"""Shared HDL map preprocessing helpers."""
 
 from __future__ import annotations
 
@@ -40,9 +36,9 @@ def adaptive_voxel_size(
 def preprocess_legacy_pcd(
     pcd_path: str,
     voxel_size: float | None = None,
-    target_points: int = 150_000,
-    z_min: float = 0.1,
-    z_max: float = 2.2,
+    target_points: int = 0,
+    z_min: float | None = None,
+    z_max: float | None = None,
 ):
     import open3d as o3d
 
@@ -52,18 +48,23 @@ def preprocess_legacy_pcd(
         raise RuntimeError(f"PCD is empty or unreadable: {pcd_path}")
 
     points = np.asarray(pcd.points)
-    mask = (points[:, 2] >= z_min) & (points[:, 2] <= z_max)
-    pcd = pcd.select_by_index(np.where(mask)[0])
+    mask = np.ones(raw_count, dtype=bool)
+    if z_min is not None:
+        mask &= points[:, 2] >= z_min
+    if z_max is not None:
+        mask &= points[:, 2] <= z_max
+    if z_min is not None or z_max is not None:
+        pcd = pcd.select_by_index(np.where(mask)[0])
     filtered_count = len(pcd.points)
     if filtered_count == 0:
         raise RuntimeError(
             f"Height filter z=[{z_min}, {z_max}] removed all map points"
         )
 
-    if voxel_size is not None:
+    if voxel_size is not None and voxel_size > 0.0:
         output = pcd.voxel_down_sample(voxel_size)
         selected_voxel = voxel_size
-    elif filtered_count <= target_points:
+    elif target_points <= 0 or filtered_count <= target_points:
         output = pcd
         selected_voxel = None
     else:

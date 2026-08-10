@@ -183,6 +183,9 @@ public:
   }
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr downsample(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, double resolution) {
+    if (resolution <= 0.0) {
+      return cloud;
+    }
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxelgrid;
     voxelgrid.setLeafSize(resolution, resolution, resolution);

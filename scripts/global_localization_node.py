@@ -247,17 +247,10 @@ def find_latest_pcd(directory: str) -> str:
 
 
 def load_pcd_as_cloud2(pcd_path: str, voxel_size: float = None,
-                       target_points: int = 150_000,
-                       z_min: float = 0.1, z_max: float = 2.2) -> PointCloud2:
-    """Load PCD, height-filter, pre-downsample with open3d, return xyz-only PointCloud2.
-
-    Pre-downsampling avoids sending millions of raw points over the ROS2
-    service — the hdl node would downsample them anyway.
-    If voxel_size is None, adaptively searches for a voxel size that yields
-    ~target_points (default 150 000, tolerance ±20 %).
-    z_min/z_max clip floor reflections and ceiling to keep only structurally
-    distinctive points (columns, walls, furniture).
-    """
+                       target_points: int = 0,
+                       z_min: float | None = None,
+                       z_max: float | None = None) -> PointCloud2:
+    """Load a PCD and preserve all points unless filtering is requested."""
     pcd_down, metadata = preprocess_legacy_pcd(
         pcd_path,
         voxel_size=voxel_size,
@@ -268,9 +261,12 @@ def load_pcd_as_cloud2(pcd_path: str, voxel_size: float = None,
     n_raw = metadata["raw_points"]
     n_filtered = metadata["height_filtered_points"]
     n_down = metadata["prepared_points"]
-    print(f"[map] height filter z=[{z_min}, {z_max}]: {n_raw} → {n_filtered} pts")
+    if z_min is None and z_max is None:
+        print(f"[map] height filter disabled: {n_raw} pts preserved")
+    else:
+        print(f"[map] height filter z=[{z_min}, {z_max}]: {n_raw} → {n_filtered} pts")
     if metadata["python_voxel"] is None:
-        print(f"[map] {n_filtered} pts (already ≤ target={target_points}, no downsampling)")
+        print(f"[map] {n_filtered} pts preserved without Python downsampling")
     else:
         print(
             f"[map] {n_filtered} pts → {n_down} pts "

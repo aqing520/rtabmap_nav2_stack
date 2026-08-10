@@ -283,12 +283,16 @@ int main(int argc, char** argv) {
       prepared_points = prepared->size();
 
       const auto downsample_started = std::chrono::steady_clock::now();
-      pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxel_grid;
       const float map_voxel =
         profile.value("globalmap_downsample_resolution", 0.2);
-      voxel_grid.setLeafSize(map_voxel, map_voxel, map_voxel);
-      voxel_grid.setInputCloud(prepared);
-      voxel_grid.filter(*surface);
+      if (map_voxel > 0.0f) {
+        pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxel_grid;
+        voxel_grid.setLeafSize(map_voxel, map_voxel, map_voxel);
+        voxel_grid.setInputCloud(prepared);
+        voxel_grid.filter(*surface);
+      } else {
+        surface = prepared;
+      }
       downsample_sec = elapsed(downsample_started);
       if (surface->empty()) {
         throw std::runtime_error(
