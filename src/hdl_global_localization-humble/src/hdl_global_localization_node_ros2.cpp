@@ -35,8 +35,10 @@ public:
     GlobalConfig::instance(config_path);
 
     const Config config(GlobalConfig::get_config_path("config_base"));
-    globalmap_downsample_resolution = config.param<double>("base", "globalmap_downsample_resolution", 0.5);
-    query_downsample_resolution = config.param<double>("base", "query_downsample_resolution", 0.5);
+    base_globalmap_downsample_resolution =
+      config.param<double>("base", "globalmap_downsample_resolution", 0.5);
+    base_query_downsample_resolution =
+      config.param<double>("base", "query_downsample_resolution", 0.5);
 
     const Config fpfh_config(GlobalConfig::get_config_path("config_fpfh"));
     const bool structural_profile_enabled =
@@ -59,6 +61,24 @@ public:
       "Active FPFH profile: " << active_fpfh_profile);
     const std::vector<std::string> profile_path = {
       "profiles", active_fpfh_profile};
+    fpfh_globalmap_downsample_resolution =
+      fpfh_config.param_nested<double>(
+        profile_path, "globalmap_downsample_resolution",
+        base_globalmap_downsample_resolution);
+    // Keep legacy map/query density identical. This also avoids adding a
+    // runtime-only field to the cache profile hash and invalidating an
+    // already-built full-resolution cache.
+    fpfh_query_downsample_resolution =
+      fpfh_globalmap_downsample_resolution;
+    RCLCPP_INFO_STREAM(
+      this->get_logger(),
+      "Point preprocessing: base(map="
+        << base_globalmap_downsample_resolution
+        << "m, query=" << base_query_downsample_resolution
+        << "m), FPFH profile(map="
+        << fpfh_globalmap_downsample_resolution
+        << "m, query=" << fpfh_query_downsample_resolution
+        << "m); resolution <= 0 preserves every input point");
     fpfh_params.normal_estimation_radius =
       fpfh_config.param_nested<double>(
         profile_path, "normal_radius", 0.5);
@@ -168,6 +188,7 @@ public:
       RCLCPP_WARN_STREAM(this->get_logger(), "Unknown Global Localization Engine:" << engine_name);
       return false;
     }
+    active_engine_name = engine_name;
 
     if (global_map) {
       if (engine_name == "FPFH_RANSAC" && global_map_cache) {
@@ -194,12 +215,33 @@ public:
     return filtered;
   }
 
+  double active_globalmap_downsample_resolution() const {
+    return active_engine_name == "FPFH_RANSAC"
+      ? fpfh_globalmap_downsample_resolution
+      : base_globalmap_downsample_resolution;
+  }
+
+  double active_query_downsample_resolution() const {
+    return active_engine_name == "FPFH_RANSAC"
+      ? fpfh_query_downsample_resolution
+      : base_query_downsample_resolution;
+  }
+
   void set_global_map(const srv::SetGlobalMap::Request::SharedPtr req, srv::SetGlobalMap::Response::SharedPtr res) {
     RCLCPP_INFO_STREAM(this->get_logger(), "Global Map Received");
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::fromROSMsg(req->global_map, *cloud);
-    cloud = downsample(cloud, globalmap_downsample_resolution);
+    const std::size_t input_points = cloud->size();
+    const double resolution = active_globalmap_downsample_resolution();
+    cloud = downsample(cloud, resolution);
+    RCLCPP_INFO_STREAM(
+      this->get_logger(),
+      "Global map preprocessing: engine=" << active_engine_name
+      << " input_points=" << input_points
+      << " output_points=" << cloud->size()
+      << " voxel_resolution=" << resolution
+      << (resolution <= 0.0 ? " (disabled)" : "m"));
 
     globalmap_header = req->global_map.header;
     global_map = cloud;
@@ -296,7 +338,16 @@ public:
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::fromROSMsg(req->cloud, *cloud);
-    cloud = downsample(cloud, query_downsample_resolution);
+    const std::size_t input_points = cloud->size();
+    const double resolution = active_query_downsample_resolution();
+    cloud = downsample(cloud, resolution);
+    RCLCPP_INFO_STREAM(
+      this->get_logger(),
+      "Query preprocessing: engine=" << active_engine_name
+      << " input_points=" << input_points
+      << " output_points=" << cloud->size()
+      << " voxel_resolution=" << resolution
+      << (resolution <= 0.0 ? " (disabled)" : "m"));
 
     auto results = engine->query(cloud, req->max_num_candidates);
 
@@ -423,8 +474,11 @@ public:
   }
 
 private:
-  double globalmap_downsample_resolution;
-  double query_downsample_resolution;
+  double base_globalmap_downsample_resolution;
+  double base_query_downsample_resolution;
+  double fpfh_globalmap_downsample_resolution;
+  double fpfh_query_downsample_resolution;
+  std::string active_engine_name;
   std::string active_fpfh_profile;
   GlobalLocalizationEngineFPFH_RANSACParams fpfh_params;
 
