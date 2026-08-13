@@ -304,6 +304,19 @@ db/pcd/*.pcd
 `db/rtabmap.db` 自动导出一份带时间戳的新 PCD 到 `db/pcd`，然后使用刚导出
 的最新文件进行 HDL 匹配。
 
+默认的 `legacy_fpfh_v1` 配置会保留地图和实时查询的全部点：不做高度裁剪、
+目标点数缩减或体素降采样。这里的“不降采样”与缓存 PCD 的二进制压缩存储
+不是一回事；缓存文件仍使用无损的 binary-compressed 格式，读取后的点数和
+坐标不变。由其他 HDL 引擎使用的基础 `0.2m` 降采样默认值保持不变。
+
+从旧的降采样配置切换后，需要为同一张 PCD 重建一次 FPFH 缓存：
+
+```bash
+PCD_PATH=/absolute/path/to/map.pcd \
+FORCE_REBUILD_CACHE=true \
+bash robot.sh cache
+```
+
 如果已经准备好指定的 PCD，可以显式传入；此时跳过自动导出：
 
 ```bash
