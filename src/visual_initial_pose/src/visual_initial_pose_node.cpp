@@ -66,8 +66,6 @@ public:
 
     navigation_client_ = create_client<nav2_msgs::srv::ManageLifecycleNodes>(
       navigation_manager_service_);
-    collision_client_ = create_client<nav2_msgs::srv::ManageLifecycleNodes>(
-      collision_manager_service_);
 
     started_at_ = std::chrono::steady_clock::now();
     last_process_at_ = started_at_ -
@@ -105,7 +103,6 @@ private:
     INITIALIZING,
     SEARCHING,
     WAITING_TF_CONFIRMATION,
-    ACTIVATING_COLLISION,
     ACTIVATING_NAVIGATION,
     COMPLETE,
     FAILED,
@@ -204,7 +201,6 @@ private:
     allow_last_pose_fallback_ = declare_parameter<bool>("allow_last_pose_fallback", false);
 
     activate_nav2_on_success_ = declare_parameter<bool>("activate_nav2_on_success", false);
-    activate_collision_monitor_ = declare_parameter<bool>("activate_collision_monitor", true);
     tf_confirmation_timeout_sec_ = std::max(
       1.0, declare_parameter<double>("tf_confirmation_timeout_sec", 10.0));
     tf_settle_delay_sec_ = std::max(
@@ -217,8 +213,6 @@ private:
       1.0, declare_parameter<double>("lifecycle_service_timeout_sec", 30.0));
     navigation_manager_service_ = declare_parameter<std::string>(
       "navigation_manager_service", "/lifecycle_manager_navigation/manage_nodes");
-    collision_manager_service_ = declare_parameter<std::string>(
-      "collision_manager_service", "/lifecycle_manager_collision_monitor/manage_nodes");
 
     if (activate_nav2_on_success_ && !publish_initialpose_) {
       RCLCPP_WARN(
@@ -391,7 +385,6 @@ private:
     }
 
     if (
-      state_ == State::ACTIVATING_COLLISION ||
       state_ == State::ACTIVATING_NAVIGATION ||
       state_ == State::COMPLETE)
     {
@@ -701,12 +694,6 @@ private:
       handle_tf_confirmation(now_steady);
       return;
     }
-    if (state_ == State::ACTIVATING_COLLISION) {
-      drive_lifecycle_activation(
-        collision_client_, collision_manager_service_, "collision monitor",
-        State::ACTIVATING_NAVIGATION);
-      return;
-    }
     if (state_ == State::ACTIVATING_NAVIGATION) {
       drive_lifecycle_activation(
         navigation_client_, navigation_manager_service_, "Nav2 navigation", State::COMPLETE);
@@ -787,8 +774,7 @@ private:
         publish_status("tf_confirmed", "map to base transform agrees with visual initial pose");
         activation_started_at_ = now_steady;
         lifecycle_request_in_flight_ = false;
-        state_ = activate_collision_monitor_ ?
-          State::ACTIVATING_COLLISION : State::ACTIVATING_NAVIGATION;
+        state_ = State::ACTIVATING_NAVIGATION;
         return;
       }
     } catch (const tf2::TransformException &) {
@@ -899,7 +885,6 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
 
   rclcpp::Client<nav2_msgs::srv::ManageLifecycleNodes>::SharedPtr navigation_client_;
-  rclcpp::Client<nav2_msgs::srv::ManageLifecycleNodes>::SharedPtr collision_client_;
 
   State state_{State::INITIALIZING};
   std::chrono::steady_clock::time_point started_at_;
@@ -931,7 +916,6 @@ private:
   std::string initialpose_topic_;
   std::string status_topic_;
   std::string navigation_manager_service_;
-  std::string collision_manager_service_;
 
   double process_interval_sec_{1.0};
   double sensor_wait_timeout_sec_{30.0};
@@ -958,7 +942,6 @@ private:
   double fallback_yaw_variance_{0.068};
   bool allow_last_pose_fallback_{false};
   bool activate_nav2_on_success_{false};
-  bool activate_collision_monitor_{true};
   double tf_confirmation_timeout_sec_{10.0};
   double tf_settle_delay_sec_{0.5};
   double tf_confirmation_linear_tolerance_{0.5};

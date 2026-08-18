@@ -69,9 +69,6 @@ class RobotLogFilter:
         self.shutdown = False
         self.once_keys = set()
         self.last_emit = {}
-        self.collision_stale_total = 0
-        self.collision_stale_last_reported = 0
-        self.collision_stale_delay = 0.0
         self.tf_timeout_total = 0
         self.tag_tf_total = 0
         self.tag_tf_last_reported = 0
@@ -266,8 +263,6 @@ class RobotLogFilter:
         if "Managed nodes are active" in line:
             if "lifecycle_manager_navigation" in line:
                 self.emit_once("nav_ready", "[READY] Nav2 导航节点已全部激活")
-            elif "lifecycle_manager_collision_monitor" in line:
-                self.emit_once("collision_ready", "[OK] Collision Monitor 已激活")
             return
 
         # Keep map/database save results.
@@ -276,23 +271,6 @@ class RobotLogFilter:
             return
         if "2D occupancy grid map saved" in line:
             self.emit_once("map_saved", "[OK] RTAB-Map 二维栅格地图保存完成")
-            return
-
-        # Rate-limit Collision Monitor stale-cloud warnings.
-        if "Ignoring the source" in line and "timestamps differ on" in line:
-            self.collision_stale_total += 1
-            match = DELAY_RE.search(line)
-            if match:
-                self.collision_stale_delay = float(match.group(1))
-            now = time.monotonic()
-            if now - self.last_emit.get("collision_stale", -5.0) >= 5.0:
-                self.last_emit["collision_stale"] = now
-                self.collision_stale_last_reported = self.collision_stale_total
-                self.emit(
-                    "[WARN] Collision Monitor 点云过期："
-                    f"延迟 {self.collision_stale_delay:.2f}s，累计忽略 "
-                    f"{self.collision_stale_total} 次"
-                )
             return
 
         # Pure-LiDAR mode may still see another workspace's AprilTag topic.
@@ -438,12 +416,6 @@ class RobotLogFilter:
 
     def finish(self) -> None:
         self.flush_traceback()
-        if self.collision_stale_total > self.collision_stale_last_reported:
-            self.emit(
-                "[WARN] Collision Monitor 点云过期汇总："
-                f"最后延迟 {self.collision_stale_delay:.2f}s，"
-                f"累计忽略 {self.collision_stale_total} 次"
-            )
         if self.tag_tf_total > self.tag_tf_last_reported:
             self.emit(
                 "[WARN] AprilTag TF 警告汇总："

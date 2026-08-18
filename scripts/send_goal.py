@@ -140,7 +140,7 @@ def parse_args():
     parser.add_argument("--rotate-timeout", type=float, default=20.0)
     parser.add_argument("--tf-timeout", type=float, default=3.0)
     parser.add_argument("--action-timeout", type=float, default=5.0)
-    parser.add_argument("--cmd-topic", default="/cmd_vel_nav")
+    parser.add_argument("--cmd-topic", default="/cmd_vel")
     parser.add_argument("--action-name", default="/navigate_to_pose")
     parser.add_argument("--map-frame", default="map")
     parser.add_argument("--base-frame", default="base_footprint")

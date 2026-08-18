@@ -19,7 +19,7 @@ OPTIMIZATION_ERROR_RATIO_KEY = 'Loop/Optimization_max_error_ratio/'
 
 
 class StartupLocalizationGuard(Node):
-    """Wait for RTAB-Map localization, then activate collision monitor and Nav2."""
+    """Wait for RTAB-Map localization, then activate Nav2."""
 
     def __init__(self):
         super().__init__('rtabmap_startup_localization_guard')
@@ -31,10 +31,6 @@ class StartupLocalizationGuard(Node):
         self.navigation_manager_service = self.declare_parameter(
             'navigation_manager_service',
             '/lifecycle_manager_navigation/manage_nodes',
-        ).value
-        self.collision_manager_service = self.declare_parameter(
-            'collision_manager_service',
-            '/lifecycle_manager_collision_monitor/manage_nodes',
         ).value
 
         self.sensor_wait_timeout_sec = max(
@@ -89,9 +85,6 @@ class StartupLocalizationGuard(Node):
         self.allow_last_pose_fallback = bool(
             self.declare_parameter('allow_last_pose_fallback', False).value
         )
-        self.activate_collision_monitor = bool(
-            self.declare_parameter('activate_collision_monitor', True).value
-        )
 
         self.started_at = time.monotonic()
         self.first_info_at = None
@@ -128,10 +121,6 @@ class StartupLocalizationGuard(Node):
         self.navigation_client = self.create_client(
             ManageLifecycleNodes,
             self.navigation_manager_service,
-        )
-        self.collision_client = self.create_client(
-            ManageLifecycleNodes,
-            self.collision_manager_service,
         )
 
         self.timer = self.create_timer(0.5, self.timer_callback)
@@ -324,22 +313,13 @@ class StartupLocalizationGuard(Node):
         self.state = 'ACTIVATING'
         self.activation_reason = reason
         self.activation_started_at = time.monotonic()
-        self.activation_steps = []
-        if self.activate_collision_monitor:
-            self.activation_steps.append(
-                (
-                    'collision monitor',
-                    self.collision_client,
-                    self.collision_manager_service,
-                )
-            )
-        self.activation_steps.append(
+        self.activation_steps = [
             (
                 'Nav2 navigation',
                 self.navigation_client,
                 self.navigation_manager_service,
             )
-        )
+        ]
         self.activation_step_index = 0
         self.activation_future = None
 

@@ -8,7 +8,7 @@
 #
 # Extra arguments are forwarded to the ROS 2 launch file:
 #   ./robot.sh map rviz:=false
-#   ./robot.sh nav enable_collision_monitor:=false
+#   ./robot.sh nav enable_rviz:=false
 #   ./robot.sh rel enable_rviz:=false
 
 set -Eeuo pipefail
@@ -83,7 +83,7 @@ usage() {
 
 可在模式后追加 launch 参数，例如:
   ./robot.sh map rviz:=false
-  ./robot.sh nav enable_collision_monitor:=false
+  ./robot.sh nav enable_rviz:=false
   ./robot.sh rel enable_rviz:=false
 
 rel 模式可通过环境变量覆盖:
@@ -255,21 +255,6 @@ run_sensor_startup_check() {
         --max-age "$ROBOT_SENSOR_MAX_AGE" \
         --max-future "$ROBOT_SENSOR_MAX_FUTURE" \
         --required-samples "$ROBOT_SENSOR_REQUIRED_SAMPLES"
-}
-
-launch_arg_value() {
-    local key="$1"
-    local default_value="$2"
-    shift 2
-
-    local value="$default_value"
-    local arg
-    for arg in "$@"; do
-        if [[ "$arg" == "$key:="* ]]; then
-            value="${arg#"$key:="}"
-        fi
-    done
-    printf '%s\n' "$value"
 }
 
 activate_lifecycle_manager() {
@@ -456,14 +441,10 @@ ros2 pkg prefix cuda_mppi_controller >/dev/null 2>&1 \
 
 if [[ "$MODE" == "nav" ]]; then
     echo "[INFO] 启动基础导航；Nav2 将保持 inactive，直到传感器检查通过。"
-    COLLISION_MONITOR_ENABLED="$(
-        launch_arg_value enable_collision_monitor true "$@"
-    )"
     install_stack_cleanup_traps
     start_background_stack nav \
         ros2 launch robot_bringup bringup.launch.py \
         enable_rviz:=true \
-        enable_collision_monitor:=true \
         "$@" \
         autostart:=false \
         mode:=navigation \
@@ -481,15 +462,6 @@ if [[ "$MODE" == "nav" ]]; then
         || die "传感器数据未达到启动条件，Nav2 保持 inactive。"
     kill -0 "$STACK_LAUNCH_PID" 2>/dev/null \
         || die "导航 launch 已提前退出，请查看：$TERMINAL_LOG"
-
-    if [[ "$COLLISION_MONITOR_ENABLED" == "true" ]]; then
-        activate_lifecycle_manager \
-            /lifecycle_manager_collision_monitor/manage_nodes \
-            "Collision Monitor" \
-            || die "安全节点未激活，Nav2 不会启动。"
-    else
-        echo "[WARN] Collision Monitor 已按 launch 参数禁用。"
-    fi
 
     activate_lifecycle_manager \
         /lifecycle_manager_navigation/manage_nodes \
@@ -636,9 +608,6 @@ if [[ -n "$RELOCALIZATION_CACHE_SOURCE_PATH" ]]; then
     echo "[INFO] 缓存源：$RELOCALIZATION_CACHE_SOURCE_PATH"
 fi
 
-COLLISION_MONITOR_ENABLED="$(
-    launch_arg_value enable_collision_monitor true "$@"
-)"
 if [[ "$RELOCALIZATION_ENGINE" == "FPFH_RANSAC" ]]; then
     export HDL_FPFH_PROFILE="$RELOCALIZATION_PROFILE"
 fi
@@ -647,7 +616,6 @@ start_background_stack rel \
     ros2 launch robot_bringup global_localization_bringup.launch.py \
         database_path:="$DATABASE_PATH" \
         enable_rviz:=true \
-        enable_collision_monitor:=true \
         use_edited_map:=false \
         "$@"
 
@@ -728,15 +696,6 @@ if [[ "$RELOCALIZATION_STATUS" -ne 0 ]]; then
     wait_for_manual_initialpose \
         || die "未收到新的人工 /initialpose，Nav2 保持 inactive。"
     RELOCALIZATION_SOURCE="人工初始位姿"
-fi
-
-if [[ "$COLLISION_MONITOR_ENABLED" == "true" ]]; then
-    activate_lifecycle_manager \
-        /lifecycle_manager_collision_monitor/manage_nodes \
-        "Collision Monitor" \
-        || die "安全节点未激活，Nav2 不会启动。"
-else
-    echo "[WARN] Collision Monitor 已按 launch 参数禁用。"
 fi
 
 activate_lifecycle_manager \

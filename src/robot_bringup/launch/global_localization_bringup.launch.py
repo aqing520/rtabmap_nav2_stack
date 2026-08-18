@@ -44,7 +44,6 @@ def generate_launch_description() -> LaunchDescription:
     mode          = LaunchConfiguration('mode')
     nav2_controller = LaunchConfiguration('nav2_controller')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
-    enable_collision_monitor = LaunchConfiguration('enable_collision_monitor')
     use_edited_map = LaunchConfiguration('use_edited_map')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
@@ -75,11 +74,6 @@ def generate_launch_description() -> LaunchDescription:
             description='Optional Nav2 params file. Overrides nav2_controller when set.',
         ),
         DeclareLaunchArgument(
-            'enable_collision_monitor',
-            default_value='true',
-            description='Filter Nav2 /cmd_vel through collision_monitor',
-        ),
-        DeclareLaunchArgument(
             'use_edited_map',
             default_value='false',
             description='Use an offline edited Nav2 map instead of RTAB-Map /map.',
@@ -98,7 +92,6 @@ def generate_launch_description() -> LaunchDescription:
             'autostart':     'false',
             'nav2_controller': nav2_controller,
             'nav2_params_file': nav2_params_file,
-            'enable_collision_monitor': enable_collision_monitor,
             'use_edited_map': use_edited_map,
             'sensor_profile': 'lidar_only',
             'start_livox': 'true',

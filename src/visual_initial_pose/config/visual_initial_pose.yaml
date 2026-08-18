@@ -38,11 +38,9 @@
     allow_last_pose_fallback: false
 
     activate_nav2_on_success: false
-    activate_collision_monitor: true
     tf_confirmation_timeout_sec: 10.0
     tf_settle_delay_sec: 0.5
     tf_confirmation_linear_tolerance: 0.5
     tf_confirmation_yaw_tolerance: 0.5
     lifecycle_service_timeout_sec: 30.0
     navigation_manager_service: "/lifecycle_manager_navigation/manage_nodes"
-    collision_manager_service: "/lifecycle_manager_collision_monitor/manage_nodes"

@@ -8,7 +8,7 @@ Assumptions:
 - RTAB-Map is the only publisher of map -> odom.
 - FAST-LIO publishes odom -> base_footprint and /Odometry.
 - Nav2 consumes /map and /Odometry.
-- Nav2 outputs /cmd_vel_nav → collision_monitor filters → /cmd_vel → wheeltec hardware.
+- Nav2 outputs /cmd_vel directly to the wheeltec hardware subscriber.
 """
 
 import os
@@ -21,7 +21,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from nav2_common.launch import RewrittenYaml
-from launch_ros.actions import Node, SetRemap
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 DEFAULT_RTABMAP_ARGS = (
@@ -89,7 +89,6 @@ def generate_launch_description() -> LaunchDescription:
     start_camera = LaunchConfiguration('start_camera')
     enable_gps = LaunchConfiguration('enable_gps')
     enable_rviz = LaunchConfiguration('enable_rviz')
-    enable_collision_monitor = LaunchConfiguration('enable_collision_monitor')
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     delete_db_on_mapping_start = LaunchConfiguration('delete_db_on_mapping_start')
     database_path = LaunchConfiguration('database_path')
@@ -149,7 +148,6 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('start_camera', default_value='false', description='Start Orbbec Gemini/Astra RGB-D camera'),
         DeclareLaunchArgument('enable_gps', default_value='false', description='Enable navsat_transform and pass GPS fix to RTAB-Map'),
         DeclareLaunchArgument('enable_rviz', default_value='false', description='Launch RViz with Nav2 navigation config'),
-        DeclareLaunchArgument('enable_collision_monitor', default_value='true', description='Filter Nav2 /cmd_vel through collision_monitor'),
         DeclareLaunchArgument('publish_base_link_tf', default_value='true', description='Publish a zero static TF from base_footprint to base_link if URDF is not ready'),
         DeclareLaunchArgument(
             'delete_db_on_mapping_start',
@@ -389,11 +387,9 @@ def generate_launch_description() -> LaunchDescription:
         arguments=['-d', nav2_rviz_config],
     )
     # ── 6. Nav2 ──
-    # Remap /cmd_vel → /cmd_vel_nav so collision_monitor can intercept before the hardware.
     nav2_launch = GroupAction(
         condition=IfCondition(PythonExpression(["'", mode, "' == 'navigation'"])),
         actions=[
-            SetRemap('/cmd_vel', '/cmd_vel_nav', condition=IfCondition(enable_collision_monitor)),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(PathJoinSubstitution([nav2_bringup_share, 'launch', 'navigation_launch.py'])),
                 launch_arguments={
@@ -407,65 +403,6 @@ def generate_launch_description() -> LaunchDescription:
                 }.items(),
             ),
         ],
-    )
-
-    # ── 7. Collision Monitor ──
-    collision_monitor = Node(
-        package='nav2_collision_monitor',
-        executable='collision_monitor',
-        name='collision_monitor',
-        output='screen',
-        condition=IfCondition(PythonExpression([
-            "'", mode, "' == 'navigation' and '", enable_collision_monitor, "' == 'true'"
-        ])),
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'base_frame_id': 'base_footprint',
-            'odom_frame_id': 'odom',
-            'cmd_vel_in_topic': '/cmd_vel_nav',
-            'cmd_vel_out_topic': '/cmd_vel',
-            'transform_tolerance': 1.0,
-            'source_timeout': 1.0,
-            'base_shift_correction': True,
-            'stop_pub_timeout': 1.0,
-            'polygons': ['StopZone', 'SlowZone'],
-            'observation_sources': ['pointcloud'],
-            'StopZone.type': 'polygon',
-            'StopZone.points': [0.30, 0.24, 0.30, -0.24, -0.10, -0.24, -0.10, 0.24],
-            'StopZone.action_type': 'stop',
-            'StopZone.max_points': 3,
-            'StopZone.visualize': True,
-            'StopZone.polygon_pub_topic': 'collision_monitor/stop_zone',
-            'StopZone.enabled': True,
-            'SlowZone.type': 'polygon',
-            'SlowZone.points': [0.80, 0.38, 0.80, -0.38, -0.20, -0.38, -0.20, 0.38],
-            'SlowZone.action_type': 'slowdown',
-            'SlowZone.max_points': 3,
-            'SlowZone.slowdown_ratio': 0.45,
-            'SlowZone.visualize': True,
-            'SlowZone.polygon_pub_topic': 'collision_monitor/slow_zone',
-            'SlowZone.enabled': True,
-            'pointcloud.type': 'pointcloud',
-            'pointcloud.topic': '/cloud_registered_body',
-            'pointcloud.min_height': 0.12,
-            'pointcloud.max_height': 1.00,
-            'pointcloud.enabled': True,
-        }],
-    )
-
-    collision_monitor_lifecycle = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_collision_monitor',
-        output='screen',
-        condition=IfCondition(PythonExpression([
-            "'", mode, "' == 'navigation' and '", enable_collision_monitor, "' == 'true'"
-        ])),
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'autostart': autostart,
-            'node_names': ['collision_monitor'],
-        }],
     )
 
     multi_waypoint_route_node = Node(
@@ -511,7 +448,5 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(edited_map_lifecycle)
     ld.add_action(rviz_node)
     ld.add_action(nav2_launch)
-    ld.add_action(collision_monitor)
-    ld.add_action(collision_monitor_lifecycle)
     ld.add_action(multi_waypoint_route_node)
     return ld
