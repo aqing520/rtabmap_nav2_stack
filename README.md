@@ -155,7 +155,7 @@ bash robot.sh nav
 6. 以 `autostart=false` 启动 `robot_bringup/bringup.launch.py`。
 7. 确认 `/cloud_registered_body` 和 `/Odometry` 都只有一个 publisher，
    并连续检查点云、里程计及 `odom → base_footprint` TF 的时间戳新鲜度。
-8. 检查通过后才激活 Collision Monitor 和 Nav2。
+8. 检查通过后才激活 Nav2。
 
 默认关键参数为：
 
@@ -168,7 +168,6 @@ start_camera=false
 enable_gps=false
 autostart=false（由 robot.sh 检查通过后手动激活）
 enable_rviz=true
-enable_collision_monitor=true
 use_edited_map=false
 database_path=<项目根目录>/db/rtabmap.db
 ```
@@ -177,12 +176,6 @@ database_path=<项目根目录>/db/rtabmap.db
 
 ```bash
 bash robot.sh nav enable_rviz:=false
-```
-
-临时关闭碰撞监控：
-
-```bash
-bash robot.sh nav enable_collision_monitor:=false
 ```
 
 ### 2.2 导航逻辑
@@ -203,12 +196,11 @@ RTAB-Map（localization 模式）
   ├── 全局规划：Navfn
   ├── 局部控制：CUDA MPPI
   ├── 点云代价地图：STVL
-  └── 输出 /cmd_vel_nav
-        ↓
- Collision Monitor
-        ↓
-     /cmd_vel
+  └── 直接输出 /cmd_vel
 ```
+
+当前项目不再启动独立的近障停车/减速速度过滤节点；障碍物处理依赖 Nav2
+代价地图和控制器，底盘侧急停能力需单独保证。
 
 `nav` 模式不启动视觉或 HDL 全局重定位，但 RTAB-Map 必须保持基础激光
 定位模式，用于读取数据库并提供 Nav2 所需的 `map → odom`。机器人被搬动
@@ -281,7 +273,6 @@ ros2 topic hz /cloud_registered_body
 ros2 node info /controller_server
 
 # 检查速度链路
-ros2 topic echo /cmd_vel_nav
 ros2 topic echo /cmd_vel
 ```
 
@@ -352,12 +343,12 @@ HDL 地图特征加载完成后丢弃加载期间缓存的旧扫描
               ↓
 短暂等待消息交付后客户端退出并清除 latch
               ↓
-激活 Collision Monitor 和 Nav2
+激活 Nav2
 ```
 
 自动重定位失败时，Nav2 会继续保持 inactive，终端提示用户在 RViz 中使用
 `2D Pose Estimate` 手动发布 `/initialpose`。脚本收到新的人工位姿后直接
-激活 Collision Monitor 和 Nav2，不再检查 `/localization_pose`、协方差或
+激活 Nav2，不再检查 `/localization_pose`、协方差或
 `map→base_footprint` TF 是否与初始位姿一致。按 Ctrl+C 可以放弃人工定位
 并停止系统。
 

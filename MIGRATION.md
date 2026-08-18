@@ -172,7 +172,7 @@ export CUDA_ROBOTICS_SETUP=/目标路径/cuda_robotics_ws/install/setup.bash
 
 其中包含当前使用的 Nav2 覆盖版本和 Wheeltec 底盘相关包。
 
-只用 apt 安装的 Nav2 也可能运行，但需要重新验证 CUDA MPPI、STVL、行为树和 Collision Monitor 的兼容性。为了完全复现当前效果，建议一起迁移或重新构建 `wheeltec_ros2`。
+只用 apt 安装的 Nav2 也可能运行，但需要重新验证 CUDA MPPI、STVL 和行为树的兼容性。为了完全复现当前效果，建议一起迁移或重新构建 `wheeltec_ros2`。
 
 本项目只发布：
 
