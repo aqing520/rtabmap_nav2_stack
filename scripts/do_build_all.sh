@@ -140,7 +140,7 @@ HEAVY_PACKAGES=(
 REST_PACKAGES=(
   rtabmap_util rtabmap_odom rtabmap_slam rtabmap_launch rtabmap_examples rtabmap_demos rtabmap_ros
   rtsp_camera_bridge bt468_rtk_driver hdl_global_localization
-  map_paint_editor_plugin nav2_controller_benchmark visual_initial_pose robot_bringup
+  map_paint_editor_plugin visual_initial_pose robot_bringup
 )
 
 CMAKE_ARGS=(
