@@ -77,3 +77,6 @@ pgm_map/
 
 # Generated test results and evidence (local only)
 test_results/
+
+# Local ROS 2 bags captured during field validation
+/rosbag2_2026_08_20-20_19_17/

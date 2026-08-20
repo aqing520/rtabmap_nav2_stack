@@ -30,10 +30,18 @@ STARTUP_CHECKER="$WS_DIR/scripts/robot_startup_check.py"
 
 ROBOT_STARTUP_CHECKS="${ROBOT_STARTUP_CHECKS:-true}"
 ROBOT_ROS2_CLEANUP_WAIT="${ROBOT_ROS2_CLEANUP_WAIT:-1.0}"
+ROBOT_LIVOX_RESTART="${ROBOT_LIVOX_RESTART:-true}"
 ROBOT_SENSOR_CHECK_TIMEOUT="${ROBOT_SENSOR_CHECK_TIMEOUT:-30.0}"
 ROBOT_SENSOR_MAX_AGE="${ROBOT_SENSOR_MAX_AGE:-3.0}"
+ROBOT_SENSOR_READY_MAX_AGE="${ROBOT_SENSOR_READY_MAX_AGE:-0.3}"
 ROBOT_SENSOR_MAX_FUTURE="${ROBOT_SENSOR_MAX_FUTURE:-0.2}"
+ROBOT_SENSOR_MAX_CATCHUP_AGE_STEP="${ROBOT_SENSOR_MAX_CATCHUP_AGE_STEP:-0.03}"
 ROBOT_SENSOR_REQUIRED_SAMPLES="${ROBOT_SENSOR_REQUIRED_SAMPLES:-5}"
+
+# 当前工作空间的 FAST-LIO 和 Livox 二进制绝对路径。
+# 仅匹配这些路径下的进程，避免误杀其它工作空间的节点。
+FAST_LIO_BIN="$WS_DIR/install/fast_lio/lib/fast_lio/fastlio_mapping"
+LIVOX_DRIVER_BIN="$WS_DIR/install/livox_ros_driver2/lib/livox_ros_driver2/livox_ros_driver2_node"
 
 RELOCALIZATION_ENGINE="${RELOCALIZATION_ENGINE:-FPFH_RANSAC}"
 RELOCALIZATION_PROFILE="${RELOCALIZATION_PROFILE:-legacy_fpfh_v1}"
@@ -109,9 +117,12 @@ rel 模式可通过环境变量覆盖:
 启动清理和数据检查可通过环境变量覆盖:
   ROBOT_STARTUP_CHECKS=true
   ROBOT_ROS2_CLEANUP_WAIT=1.0
+  ROBOT_LIVOX_RESTART=true
   ROBOT_SENSOR_CHECK_TIMEOUT=30.0
   ROBOT_SENSOR_MAX_AGE=3.0
+  ROBOT_SENSOR_READY_MAX_AGE=0.3
   ROBOT_SENSOR_MAX_FUTURE=0.2
+  ROBOT_SENSOR_MAX_CATCHUP_AGE_STEP=0.03
   ROBOT_SENSOR_REQUIRED_SAMPLES=5
 EOF
 }
@@ -233,10 +244,38 @@ run_logged_check() {
     return "$status"
 }
 
+stop_workspace_node() {
+    local executable="$1"
+    local label="$2"
+
+    [[ -x "$executable" ]] || return 0
+    pgrep -f "$executable" >/dev/null 2>&1 || return 0
+
+    echo "[INFO] 停止旧 $label：pkill -f $(basename "$executable")" \
+        | tee -a "$TERMINAL_LOG"
+    pkill -INT -f "$executable" >/dev/null 2>&1 || true
+    for _ in {1..12}; do
+        pgrep -f "$executable" >/dev/null 2>&1 || return 0
+        sleep 0.25
+    done
+    pkill -KILL -f "$executable" >/dev/null 2>&1 || true
+}
+
 cleanup_previous_ros2() {
     echo "[INFO] 启动前清理旧 ROS 2 进程：pkill -f ros2" \
         | tee -a "$TERMINAL_LOG"
     pkill -f ros2 >/dev/null 2>&1 || true
+
+    # ros2 launch 被停止后，子进程可能被 PID 1 收养；其命令行不含 "ros2"。
+    # FAST-LIO 是 /Odometry 和 /cloud_registered_body 的唯一权威发布者，
+    # 因此必须确保启动前没有旧实例保留在本工作空间中。
+    stop_workspace_node "$FAST_LIO_BIN" "FAST-LIO"
+
+    # Livox 驱动同样不含 "ros2"；保留该开关以兼容已有启动习惯。
+    if [[ "$ROBOT_LIVOX_RESTART" == "true" ]]; then
+        stop_workspace_node "$LIVOX_DRIVER_BIN" "Livox 驱动"
+    fi
+
     sleep "$ROBOT_ROS2_CLEANUP_WAIT"
     echo "[OK] 旧 ROS 2 启动进程清理命令已执行。" \
         | tee -a "$TERMINAL_LOG"
@@ -253,7 +292,9 @@ run_sensor_startup_check() {
         --sensors \
         --timeout "$ROBOT_SENSOR_CHECK_TIMEOUT" \
         --max-age "$ROBOT_SENSOR_MAX_AGE" \
+        --ready-max-age "$ROBOT_SENSOR_READY_MAX_AGE" \
         --max-future "$ROBOT_SENSOR_MAX_FUTURE" \
+        --max-catchup-age-step "$ROBOT_SENSOR_MAX_CATCHUP_AGE_STEP" \
         --required-samples "$ROBOT_SENSOR_REQUIRED_SAMPLES"
 }
 
