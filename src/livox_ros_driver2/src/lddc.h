@@ -93,6 +93,11 @@ class Lddc final {
   // void SetRosPub(ros::Publisher *pub) { global_pub_ = pub; };  // NOT USED
   void SetPublishFrq(uint32_t frq) { publish_frq_ = frq; }
 
+  void SetImuPubQosConfig(int queue_size, bool best_effort) {
+    imu_pub_queue_size_ = queue_size;
+    imu_pub_best_effort_ = best_effort;
+  }
+
  public:
   Lds *lds_;
 
@@ -139,6 +144,8 @@ class Lddc final {
   double publish_frq_;
   uint32_t publish_period_ns_;
   std::string frame_id_;
+  int imu_pub_queue_size_ = 64;
+  bool imu_pub_best_effort_ = true;
 
 #ifdef BUILDING_ROS1
   bool enable_lidar_bag_;

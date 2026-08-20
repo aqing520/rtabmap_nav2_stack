@@ -37,6 +37,10 @@
 #include "driver_node.h"
 #include "lds_lidar.h"
 
+#ifdef BUILDING_ROS2
+#include <rclcpp/qos.hpp>
+#endif
+
 namespace livox_ros {
 
 /** Lidar Data Distribute Control--------------------------------------------*/
@@ -545,8 +549,19 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type,
     else if (kLivoxImuMsg == msg_type)  {
       DRIVER_INFO(*cur_node_,
           "%s publish use imu format", topic_name.c_str());
+#ifdef BUILDING_ROS2
+      rclcpp::QoS imu_qos(rclcpp::KeepLast(
+          static_cast<size_t>(imu_pub_queue_size_ > 0 ? imu_pub_queue_size_ : 64)));
+      if (imu_pub_best_effort_) {
+        imu_qos.best_effort();
+      } else {
+        imu_qos.reliable();
+      }
+      return cur_node_->create_publisher<ImuMsg>(topic_name, imu_qos);
+#else
       return cur_node_->create_publisher<ImuMsg>(topic_name,
           queue_size);
+#endif
     } else {
       PublisherPtr null_publisher(nullptr);
       return null_publisher;
@@ -674,19 +689,19 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentImuPublisher(uint8_t hand
       snprintf(name_str, sizeof(name_str), "livox/imu_%s",
           ReplacePeriodByUnderline(ip_string).c_str());
       std::string topic_name(name_str);
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
+      queue_size = imu_pub_queue_size_ > 0 ? static_cast<uint32_t>(imu_pub_queue_size_) : 64;
       private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name,
           queue_size);
     }
     return private_imu_pub_[handle];
-  } else {
-    if (!global_imu_pub_) {
-      std::string topic_name("livox/imu");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
-      global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
+    } else {
+      if (!global_imu_pub_) {
+        std::string topic_name("livox/imu");
+        queue_size = imu_pub_queue_size_ > 0 ? static_cast<uint32_t>(imu_pub_queue_size_) : 64;
+        global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
+      }
+      return global_imu_pub_;
     }
-    return global_imu_pub_;
-  }
 }
 #endif
 
