@@ -89,6 +89,7 @@ string map_file_path, lid_topic, imu_topic;
 
 double res_mean_last = 0.05, total_residual = 0.0;
 double last_timestamp_lidar = 0, last_timestamp_imu = -1.0;
+double imu_stale_drop_sec = 0.5;
 double gyr_cov = 0.1, acc_cov = 0.1, b_gyr_cov = 0.0001, b_acc_cov = 0.0001;
 double filter_size_corner_min = 0, filter_size_surf_min = 0, filter_size_map_min = 0, fov_deg = 0;
 double cube_len = 0, HALF_FOV_COS = 0, FOV_DEG = 0, total_distance = 0, lidar_end_time = 0, first_lidar_time = 0.0;
@@ -365,6 +366,12 @@ void imu_cbk(const sensor_msgs::msg::Imu::UniquePtr msg_in)
 
     mtx_buffer.lock();
 
+    if (!is_first_lidar && timestamp < last_timestamp_lidar - imu_stale_drop_sec)
+    {
+        mtx_buffer.unlock();
+        return;
+    }
+
     if (timestamp < last_timestamp_imu)
     {
         std::cerr << "lidar loop back, clear buffer" << std::endl;
@@ -414,6 +421,17 @@ bool sync_packages(MeasureGroup &meas)
 
     if (last_timestamp_imu < lidar_end_time)
     {
+        if (!imu_buffer.empty() &&
+            get_time_sec(imu_buffer.front()->header.stamp) < lidar_end_time - imu_stale_drop_sec)
+        {
+            static int stale_drop_count = 0;
+            stale_drop_count++;
+            printf("IMU lagging behind lidar (oldest imu %.3f, lidar end %.3f), drop lidar frame %d\n",
+                   get_time_sec(imu_buffer.front()->header.stamp), lidar_end_time, stale_drop_count);
+            lidar_buffer.pop_front();
+            time_buffer.pop_front();
+            lidar_pushed = false;
+        }
         return false;
     }
 
@@ -816,6 +834,7 @@ public:
         this->declare_parameter<string>("common.imu_topic", "/livox/imu");
         this->declare_parameter<bool>("common.time_sync_en", false);
         this->declare_parameter<double>("common.time_offset_lidar_to_imu", 0.0);
+        this->declare_parameter<double>("common.imu_stale_drop_sec", 0.5);
         this->declare_parameter<double>("filter_size_corner", 0.5);
         this->declare_parameter<double>("filter_size_surf", 0.5);
         this->declare_parameter<double>("filter_size_map", 0.5);
@@ -852,6 +871,7 @@ public:
         this->get_parameter_or<string>("common.imu_topic", imu_topic,"/livox/imu");
         this->get_parameter_or<bool>("common.time_sync_en", time_sync_en, false);
         this->get_parameter_or<double>("common.time_offset_lidar_to_imu", time_diff_lidar_to_imu, 0.0);
+        this->get_parameter_or<double>("common.imu_stale_drop_sec", imu_stale_drop_sec, 0.5);
         this->get_parameter_or<double>("filter_size_corner",filter_size_corner_min,0.5);
         this->get_parameter_or<double>("filter_size_surf",filter_size_surf_min,0.5);
         this->get_parameter_or<double>("filter_size_map",filter_size_map_min,0.5);
@@ -932,7 +952,14 @@ public:
         {
             sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk);
         }
-        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 10, imu_cbk);
+        cb_group_imu_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        auto imu_sub_options = rclcpp::SubscriptionOptionsWithAllocator<std::allocator<void>>();
+        imu_sub_options.callback_group = cb_group_imu_;
+        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(
+            imu_topic,
+            rclcpp::QoS(rclcpp::KeepLast(50)).best_effort(),
+            imu_cbk,
+            imu_sub_options);
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
         pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
         pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
@@ -1144,6 +1171,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pcl_pc_;
     rclcpp::Subscription<livox_ros_driver2::msg::CustomMsg>::SharedPtr sub_pcl_livox_;
+    rclcpp::CallbackGroup::SharedPtr cb_group_imu_;
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::TimerBase::SharedPtr timer_;
@@ -1166,7 +1194,11 @@ int main(int argc, char** argv)
 
     signal(SIGINT, SigHandle);
 
-    rclcpp::spin(std::make_shared<LaserMappingNode>());
+    auto node = std::make_shared<LaserMappingNode>();
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    executor.add_node(node);
+    executor.spin();
+    executor.remove_node(node);
 
     if (rclcpp::ok())
         rclcpp::shutdown();
